@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patients      Patient[]
+  appointments  Appointment[]
+  budgets       Budget[]
+  clinicalNotes ClinicalNote[]
+}
+
+model Patient {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName  String
+  lastName   String
+  documentId String?
+  phone      String?
+  email      String?
+  
+  birthDate  DateTime?
+  bloodType  String?
+  allergies  String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  appointments  Appointment[]
+  budgets       Budget[]
+  clinicalNotes ClinicalNote[]
+}
+
+model Appointment {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  startTime String
+  endTime   String
+  status    String   @default("Scheduled") // Scheduled, InProgress, Completed, Cancelled
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Budget {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  totalAmount Float    @default(0)
+  discount    Float    @default(0)
+  
+  items       BudgetItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BudgetItem {
+  id          String  @id @default(uuid())
+  budgetId    String
+  budget      Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  description String
+  quantity    Int
+  value       Float
+}
+
+model ClinicalNote {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  toothId     String?  // Can be null if it's a general note, not tied to a specific tooth
+  description String
+  date        DateTime @default(now())
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

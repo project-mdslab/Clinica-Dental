@@ -1,0 +1,117 @@
+01.01 Primera consulta 30 $13.761,17 $24.113,38 $38.000 $44.000
+01.05 Consulta ulterior 20 $9.422,23 $16.075,59 $26.000 $30.000
+01.04a Medicación 30 $13.570,03 $24.113,38 $38.000 $44.000
+01.04b Tratamiento Pulpitis aguda 45 $35.111,51 $44.850,89 $80.000 $92.000
+01.04c Tratamiento Necrosis / Gangrena 45 $34.920,35 $50.638,10 $86.000 $99.000
+01.04d Tratamiento Abscesos agudos 45 $28.371,72 $34.723,27 $64.000 $72.000
+01.04e Tratamimento Alveolitis y Hemorragias 45 $30.410,05 $39.063,68 $70.000 $80.000
+01.04f Tratamiento GUNA y PUNA 40 $26.928,39 $30.865,13 $58.000 $66.000
+01.04g Tratamiento traum. dent. sin expos. pulpar 60 $45.102,17 $59.801,19 $105.000 $120.000
+01.04h Tratamiento traum. dent. con expos. pulpar 60 $49.656,87 $59.801,19 $110.000 $125.000
+01.04i Tratamiento traum. dent. con lux. o avulsión 60 $55.491,86 $59.801,19 $116.000 $131.000
+01.04j Prótesis fijas descementadas 45 $26.957,28 $39.063,68 $67.000 $76.000
+02.01 Amalgama simple 50 $40.039,36 $56.264,56 $97.000 $111.000
+02.02 Amalgama compuesta 55 $45.286,65 $61.891,01 $108.000 $123.000
+02.03 Amalgama compleja 60 $50.943,81 $67.517,47 $119.000 $136.000
+02.04 Amalgama con refuerzo metálico 65 $57.899,73 $73.143,92 $132.000 $150.000
+02.09 Reconstrucción de ángulo 90 $77.042,02 $101.276,20 $179.000 $204.000
+02.15 Restauración estética simple 50 $37.196,37 $56.264,56 $94.000 $108.000
+02.16 Restauración estética compuesta 60 $52.731,70 $67.517,47 $121.000 $138.000
+02.17 Restauración estética compleja 90 $72.535,92 $101.276,20 $174.000 $200.000
+02.18 Blanqueamiento interno x pieza dentaria 120 $119.816,91 $270.069,87 $390.000 $458.000
+02.19 Blanqueamiento ext.consul x sesión 90 $149.436,89 $405.104,81 $555.000 $656.000
+02.20 Blanqueamiento ambulatorio 120 $134.486,83 $424.395,51 $559.000 $665.000
+03.01 Endodoncia 1 conducto 60 $87.451,01 $115.744,23 $204.000 $233.000
+03.02 Endodoncia 2 conductos 75 $124.285,32 $144.680,29 $269.000 $306.000
+03.03 Endodoncia 3 conductos 90 $181.365,41 $202.552,40 $384.000 $435.000
+03.04 Endodoncia 4 conductos 120 $226.095,76 $270.069,87 $497.000 $564.000
+03.05 Endodoncia parcial 60 $54.413,86 $59.801,19 $115.000 $130.000
+03.06 Desobturación p/ tratamiento o retratamiento 45 $ 51.860,22 $86.808,17 $139.000 $161.000
+03.07 Protección pulpar directa 45 $38.460,85 $46.297,69 $85.000 $97.000
+05.01 Tartrectomía, cep.mecánico ambas arcadas 45 $26.734,66 $57.872,12 $85.000 $100.000
+05.02 Topicación de flúor 30 $21.852,02 $33.758,73 $56.000 $65.000
+05.03 Inactivación caries activa 60 $46.849,99 $65.588,40 $113.000 $129.000
+05.04 Educación para la salud 60 $30.955,93 $65.588,40 $97.000 $113.000
+05.05 Sellador de puntos y fisuras 40 $23.175,23 $43.982,81 $68.000 $79.000
+05.06 Inactivación caries incipiente 30 $18.678,15 $32.794,20 $52.000 $60.000
+07.01 Motivación 60 $31.043,71 $65.588,40 $97.000 $114.000
+07.03 Coronas / bandas forjadas 90 $86.301,31 $98.382,60 $185.000 $210.000
+07.04 Mantenedor de espacio, fijo 90 $83.112,49 $104.169,81 $188.000 $214.000
+07.05 Mantenedor de espacio, removible 90 $104.112,49 $98.382,60 $203.000 $228.000
+07.06 Reducción luxación 105 $76.697,25 $114.779,69 $192.000 $221.000
+07.10 Endodoncia parcial en niños (formo u otras téc sim) 60 $54.413,86 $65.588,40 $121.000 $137.000
+08.01 Historia clínica periodontal 60 $30.690,68 $42.439,55 $74.000 $84.000
+08.02 Tratamiento supragingival, ambos maxilares 60 $39.021,46 $44.368,62 $84.000 $95.000
+08.03 Tratamiento subgingival, por sector 90 $50.366,81 $63.659,33 $115.000 $130.000
+08.04 Cirugía periodontal, por sector 120 $68.844,41 $84.879,10 $154.000 $175.000
+08.05 Desgaste selectivo, por sesión 60 $40.648,05 $42.439,55 $84.000 $94.000
+09.01.01 Radiografía periapical 30 $14.502,51 $21.219,78 $36.000 $42.000
+09.01.04 Radiografía seriada 1 arcada (5 a 7 placas) 45 $29.862,63 $31.829,66 $62.000 $70.000
+09.01.05 Radiografía seriada 1 arcada (10 a 14 placas) 60 $42.898,40 $48.226,76 $92.000 $104.000
+09.01.06 Radiografía oclusal 30 $19.500,61 $27.006,99 $47.000 $54.000
+10.01 Exodoncia simple 45 $30.375,03 $49.191,30 $80.000 $92.000
+10.02 Plástica de comunicación buco-sinusal 45 $32.612,74 $48.323,22 $81.000 $94.000
+10.03 Biopsia por punción o aspiración 45 $28.265,38 $92.595,38 $121.000 $145.000
+10.04 Exodoncia compleja (quirúrgica) 75 $51.460,53 $81.985,50 $134.000 $154.000
+10.05 Reimplante dentario inmediato al trauma 105 $79.244,20 $236.311,14 $316.000 $375.000
+10.06 Drenaje absceso, vía bucal 45 $28.428,64 $160.595,12 $190.000 $230.000
+10.07 Biopsia por escisión 60 $41.460,02 $ 135.034,94 $177.000 $211.000
+10.08 Alargamiento quir. de corona clínica o decapuchonaje 45 $35.673,08 $49.191,30 $85.000 $98.000
+10.09a Extracción retención mucosa 90 $57.529,47 $260.424,52 $318.000 $384.000
+10.09b Extracción retención ósea 120 $86.056,72 $347.232,69 $434.000 $521.000
+10.10 Germectomía 120 $74.526,89 $347.232,69 $422.000 $509.000
+10.11 Lib. dientes retenidos con colgajo y ostectomia 90 $58.065,61 $260.424,52 $319.000 $384.000
+10.12 Apicectomía 120 $71.589,40 $347.232,69 $419.000 $506.000
+10.13 Frenectomia 60 $40.526,01 $173.616,35 $215.000 $258.000
+04.01.01 Incrustación Metálica 110 $126.887,59 $212.197,76 $340.000 $393.000
+04.01.02 Incrustación Resina fotocurado 110 $169.527,57 $212.197,76 $382.000 $435.000
+04.01.03 Incrustación Porcelana 155 $211.874,29 $299.005,93 $511.000 $586.000
+04.01.10 Perno colado simple directo 105 $83.255,93 $236.311,14 $320.000 $379.000
+04.01.11 Perno colado simple indirecto 90 $91.267,52 $173.616,35 $265.000 $309.000
+04.01.12 Perno colado comp. (secc. o pasante) indirecto 105 $173.616,35 $202.552,40 $310.000 $361.000
+04.01.13 Perno preformado simple 60 $41.320,18 $115.744,23 $158.000 $187.000
+04.01.14 Perno preformado compuesto (doble) 75 $52.260,59 $144.680,29 $197.000 $234.000
+04.01.15 Perno O-Ring (a bola) colado 135 $117.052,76 $260.424,52 $378.000 $443.000
+04.01.20 Corona forjada 110 $106.779,16 $141.465,17 $249.000 $284.000
+04.01.21 Corona colada 150 $130.366,98 $337.587,34 $468.000 $553.000
+04.01.22 Corona Veener 170 $165.383,33 $327.941,99 $494.000 $576.000
+04.01.23 Corona acrílico 110 $95.875,73 $176.831,46 $273.000 $317.000
+04.01.24 Corona composite 140 $169.241,41 $270.069,87 $440.000 $507.000
+04.01.25 Corona porcelana sobre metal 230 $229.922,46 $443.686,22 $674.000 $785.000
+04.01.26 Corona de porcelana SIN metal 230 $260.801,15 $665.529,32 $927.000 $1.093.000
+04.01.27 Corona provisoria de policarbonato 50 $43.269,50 $80.377,94 $124.000 $144.000
+04.01.28a Tramo de puente de porcelana sobre metal 30 $122.791,25 $125.389,58 $249.000 $280.000
+04.01.28b Tramo de puente de porcelana SIN metal 30 $152.311,25 $173.616,35 $326.000 $370.000
+04.01.30 Extracción de corona 60 $36.691,80 $96.453,53 $134.000 $158.000
+04.01.31 Extracción de perno 60 $31.561,89 $96.453,53 $129.000 $153.000
+04.02.01 PPR Acrílico - de 5 dientes 210 $165.363,60 $337.587,34 $503.000 $588.000
+04.02.02 PPR Acrílico - de 5 dientes o + 210 $186.751,64 $405.104,81 $592.000 $694.000
+04.02.03 PPR Flexible (de nylon) 210 $204.235,46 $405.104,81 $610.000 $711.000
+04.02.04 PPR Cromo Cobalto - de 5 dientes 280 $306.472,66 $540.139,74 $847.000 $982.000
+04.02.05 PPR Cromo Cobalto - de 5 dientes o + 290 $340.497,61 $559.430,45 $900.000 $1.040.000
+04.02.10 P. Completa Acrílico 295 $247.133,99 $569.075,80 $817.000 $959.000
+04.02.11 P. Completa Nylon (flexibles) 295 $298.223,99 $569.075,80 $868.000 $1.010.000
+04.02.12 P. Completa Acrílico con base Cr. Co. 355 $382.631,64 $684.820,03 $1.068.000 $1.239.000
+04.03.01 Compostura simple 20 $34.477,58 $64.302,35 $99.000 $115.000
+04.03.02 Compostura comp. o con ref. metálico 20 $6.570,88 $64.302,35 $101.000 $117.000
+04.03.03 Agregado de retenedor 20 $38.509,58 $64.302,35 $103.000 $119.000
+04.03.04 Agregado de diente 20 $38.509,58 $64.302,35 $103.000 $119.000
+04.03.05 Agregado de diente subsig. 10 $18.522,94 $32.151,18 $51.000 $59.000
+04.03.06 Soldadura de Cromo Cobalto 30 $53.170,49 $57.872,12 $112.000 $126.000
+04.03.07 Soldadura de Cromo Cobalto subs. 10 $21.038,94 $19.290,71 $105.000 $123.000
+04.03.08 Rebasado Pr. Comp. autoc. 45 $32.207,44 $72.340,14 $105.000 $123.000
+04.03.09 Rebasado Pr. Comp. termoc. 45 $116.131,85 $86.808,17 $203.000 $225.000
+04.03.10 Rebasado P.P.R. autocurado 30 $61.366,70 $57.872,12 $120.000 $134.000
+11.01 Téc. quirúrgica simple: coloc. de un implante 60 $227.946 $551.163 $945.000
+11.02 Téc. de regeneración ósea guiada ROG (inmediata) 15 $114.854 $137.791 $294.000
+11.03 Técnica de regeneración ósea guiada ROG para la colocacion diferida de un implante 45 $159.578 $413.372 $697.000
+06.01.00 Primera consulta de Ortodoncia/ Ortopedia 30 $23.216,83 $48.226,76 $72.000
+06.01.01 Consulta diagnostico (modelos, fotos, etc) 45 $49.525,24 $72.340,14 $122.000
+06.02.00 Trat. Dent. Primaria/mixta (ortopedia) 1500 $1.175.841,27 $2.411.338,13 $3.588.000
+06.03.00 Trat. Dent. Permanente (ortodoncia) 2160 $1.687.211,43 $3.472.326,90 $5.160.000
+06.03.01 Corrección de mal posiciones simples con espacio 500 $441.947,09 $803.779,38 $1.246.000
+06.04.01 Contención fija o removible ambos maxilares 90 $189.050,48 $144.680,29 $334.000
+06.05.00 Reparacion de aparatología removible 45 $94.525,24 $72.340,14 $167.000
+13.01 Consulta Diagnótica 45 $28.161,48 $72.340,14 $101.000
+13.02 Dispositivo interoclusal 90 $119.966,46 $144.680,29 $265.000
+13.03 Controles 30 $21.024,68 $48.226,76 $70.000

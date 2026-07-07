@@ -1,0 +1,967 @@
+'use client'
+import { useState, useEffect } from 'react';
+import { format, addMonths, subMonths, startOfWeek, addDays, isSameMonth, isSameDay, startOfMonth, endOfMonth, endOfWeek, isToday, parseISO, getDay, getHours } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { createClient } from '@/utils/supabase/client';
+import AlertDialog from '@/components/AlertDialog';
+import Link from 'next/link';
+import NewAppointmentModal from '@/components/NewAppointmentModal';
+import Portal from '@/components/Portal';
+
+export default function CalendarPage() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentTime] = useState(new Date());
+  
+  // Estados de Usuario
+  const [userRole, setUserRole] = useState<'secretary' | 'professional'>('secretary');
+  const [currentUserId, setCurrentUserId] = useState('');
+
+  // Instancia de Supabase
+  const supabase = createClient();
+
+  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [draggedEvent, setDraggedEvent] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
+  const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+
+  // Prestaciones dinámicas
+  const [services, setServices] = useState<{name: string, color: string}[]>([]);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [professionals, setProfessionals] = useState<any[]>([]);
+
+  // Horarios No Hábiles
+  const [unavailabilities, setUnavailabilities] = useState<{professional_id: string, dayOfWeek: number, startHour: number, endHour: number}[]>([]);
+
+  // Calcular próximo paciente (considerando el rol)
+  const currentHourNum = currentTime.getHours();
+  const sortedTodayEvents = events
+    .filter(ev => ev.date === format(new Date(), 'yyyy-MM-dd') && (userRole === 'secretary' || ev.professional_id === currentUserId))
+    .sort((a, b) => a.startHour - b.startHour);
+  const nextEvent = sortedTodayEvents.find(ev => ev.startHour >= currentHourNum);
+
+  const showAlert = (message: string, title?: string) => {
+    setAlertDialog({ isOpen: true, title: title || 'Atención', message, type: 'alert', onConfirm: () => setAlertDialog(prev => ({ ...prev, isOpen: false })), confirmText: 'Aceptar' });
+  };
+
+  // Fetch Professionals and Appointments
+  const fetchCalendarData = async () => {
+    // Fetch professionals
+    const { data: profs, error: profErr } = await supabase.rpc('get_professionals');
+    if (profErr) {
+      console.error("Error fetching professionals:", profErr);
+    }
+    const realProfessionals = profs || [];
+    setProfessionals(realProfessionals);
+
+    // Fetch appointments
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*, patients(first_name, last_name, id)');
+      
+    if (error) {
+      console.error("Error fetching appointments:", error);
+      return;
+    }
+    
+    if (data) {
+      const formattedEvents = data.map(app => {
+        const appointmentDate = parseISO(app.date);
+        const assignedProf = realProfessionals.find((p: any) => p.id === app.professional_id) || { name: 'Profesional Desconocido', id: app.professional_id };
+
+        return {
+          id: app.id,
+          title: app.service_type,
+          professional: assignedProf.name,
+          professional_id: assignedProf.id,
+          patient: app.patients ? `${app.patients.first_name} ${app.patients.last_name}` : 'Paciente Eliminado',
+          patient_id: app.patient_id,
+          type: app.service_type,
+          startHour: parseInt(app.start_time.split(':')[0]), // "09:00" -> 9
+          duration: parseInt(app.end_time.split(':')[0]) - parseInt(app.start_time.split(':')[0]),
+          dayIdx: getDay(appointmentDate), // 0 Sunday, 1 Monday, etc.
+          date: app.date,
+          status: 'Registrado'
+        };
+      });
+      setEvents(formattedEvents);
+    }
+  };
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        const { data } = await supabase.from('user_roles').select('role').eq('user_id', user.id).single();
+        if (data) setUserRole(data.role as any);
+      }
+    };
+    
+    fetchUserRole();
+    fetchCalendarData();
+
+    const storedServices = localStorage.getItem('clinic_services');
+    if (storedServices) {
+      setServices(JSON.parse(storedServices));
+    } else {
+      const defaultServices = [
+        { name: 'Consulta', color: 'bg-primary' },
+        { name: 'Cirugía', color: 'bg-[#EF4444]' },
+        { name: 'Endodoncia', color: 'bg-[#F59E0B]' },
+        { name: 'Limpieza', color: 'bg-[#10B981]' },
+      ];
+      setServices(defaultServices);
+      localStorage.setItem('clinic_services', JSON.stringify(defaultServices));
+    }
+
+    const storedUnav = localStorage.getItem('clinic_unavailabilities');
+    if (storedUnav) {
+      setUnavailabilities(JSON.parse(storedUnav));
+    } else {
+      const defaultUnav = [
+        { professional_id: '1', dayOfWeek: 1, startHour: 6, endHour: 14 }, // Lunes (6 a 14)
+        { professional_id: '1', dayOfWeek: 2, startHour: 6, endHour: 14 }, // Martes
+        { professional_id: '1', dayOfWeek: 3, startHour: 6, endHour: 14 }, // Miércoles
+        { professional_id: '1', dayOfWeek: 4, startHour: 6, endHour: 14 }, // Jueves
+        { professional_id: '1', dayOfWeek: 5, startHour: 6, endHour: 14 }, // Viernes
+      ];
+      setUnavailabilities(defaultUnav);
+      localStorage.setItem('clinic_unavailabilities', JSON.stringify(defaultUnav));
+    }
+  }, []);
+
+  const handleAddService = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newServiceName.trim()) return;
+    const colors = ['bg-primary', 'bg-[#34D399]', 'bg-[#60A5FA]', 'bg-[#F59E0B]', 'bg-[#8B5CF6]', 'bg-[#EC4899]'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const updated = [...services, { name: newServiceName.trim(), color: randomColor }];
+    setServices(updated);
+    localStorage.setItem('clinic_services', JSON.stringify(updated));
+    setNewServiceName('');
+  };
+
+  const handleDeleteService = (name: string) => {
+    const updated = services.filter(s => s.name !== name);
+    setServices(updated);
+    localStorage.setItem('clinic_services', JSON.stringify(updated));
+  };
+
+  const handleDragStart = (e: React.DragEvent, event: any) => {
+    setDraggedEvent(event);
+    setTimeout(() => { (e.target as HTMLElement).style.opacity = '0.5'; }, 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = '1';
+    setDraggedEvent(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, target: number | string, targetHour: number) => {
+    e.preventDefault();
+    if (!draggedEvent) return;
+
+    let updatedEvent = { ...draggedEvent, startHour: targetHour };
+    let newDateString = draggedEvent.date;
+    
+    if (view === 'week' || typeof target === 'number') {
+      const targetDayIdx = target as number;
+      updatedEvent.dayIdx = targetDayIdx;
+      const currentWeekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Date-fns maneja 0 como Domingo
+      const newDate = addDays(currentWeekStart, targetDayIdx);
+      newDateString = format(newDate, 'yyyy-MM-dd');
+    } else if (view === 'day' || typeof target === 'string') {
+      const profId = target as string;
+      const assignedProf = professionals.find(p => p.id === profId);
+      if (assignedProf) {
+        updatedEvent.professional_id = profId;
+        updatedEvent.professional = assignedProf.name;
+        newDateString = format(currentDate, 'yyyy-MM-dd');
+        updatedEvent.date = newDateString;
+        updatedEvent.dayIdx = getDay(currentDate);
+      }
+    }
+
+    // Actualizar estado local inmediato (Optimistic UI)
+    setEvents(prev => prev.map(ev => ev.id === draggedEvent.id ? updatedEvent : ev));
+
+    const newStartTime = `${targetHour.toString().padStart(2, '0')}:00`;
+    const newEndTime = `${(targetHour + draggedEvent.duration).toString().padStart(2, '0')}:00`;
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({ 
+        date: newDateString, 
+        start_time: newStartTime,
+        end_time: newEndTime
+      })
+      .eq('id', draggedEvent.id);
+
+    if (error) {
+      console.error("Error updating appointment:", error);
+      fetchCalendarData(); // Revertir si falla
+    }
+
+    setDraggedEvent(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Necesario para permitir el drop
+  };
+
+  const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
+  const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+  const goToToday = () => setCurrentDate(new Date());
+
+  const getEventColor = (ev: any) => {
+    const profId = ev.professional_id || '';
+    if (!profId) return { bg: 'bg-primary', text: 'text-primary', border: 'border-primary', lightBg: 'bg-primary-container/30' };
+    
+    const colors = [
+      { bg: 'bg-pink-500', text: 'text-pink-600', border: 'border-pink-300', lightBg: 'bg-pink-100' },
+      { bg: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-300', lightBg: 'bg-blue-100' },
+      { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-300', lightBg: 'bg-emerald-100' },
+      { bg: 'bg-purple-500', text: 'text-purple-600', border: 'border-purple-300', lightBg: 'bg-purple-100' },
+      { bg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-300', lightBg: 'bg-amber-100' }
+    ];
+    
+    let hash = 0;
+    for (let i = 0; i < profId.length; i++) {
+      hash = profId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
+
+  // Funciones de renderizado para el mini calendario (panel izquierdo)
+  const renderMiniCalendar = () => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(monthStart);
+    const startDate = startOfWeek(monthStart);
+    const endDate = endOfWeek(monthEnd);
+    
+    const rows = [];
+    let days = [];
+    let day = startDate;
+    let formattedDate = "";
+
+    // Días de la semana abreviados
+    const weekDays = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'];
+    
+    while (day <= endDate) {
+      for (let i = 0; i < 7; i++) {
+        formattedDate = format(day, 'd');
+        const cloneDay = day;
+        days.push(
+          <div
+            key={day.toString()}
+            className={`text-center py-1 text-xs font-medium cursor-pointer rounded-full transition-colors ${
+              !isSameMonth(day, monthStart)
+                ? "text-on-surface-variant/40"
+                : isSameDay(day, currentDate)
+                ? "bg-primary text-on-primary shadow-sm"
+                : "text-on-surface hover:bg-surface-container-highest"
+            }`}
+            onClick={() => setCurrentDate(cloneDay)}
+          >
+            {formattedDate}
+          </div>
+        );
+        day = addDays(day, 1);
+      }
+      rows.push(
+        <div className="grid grid-cols-7 gap-1 mt-1" key={day.toString()}>
+          {days}
+        </div>
+      );
+      days = [];
+    }
+
+    return (
+      <div className="bg-surface-container-low rounded-2xl p-4 shadow-sm border border-outline-variant">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-title-sm text-title-sm capitalize text-on-surface font-semibold">
+            {format(currentDate, 'MMMM yyyy', { locale: es })}
+          </h3>
+          <div className="flex gap-1">
+            <button onClick={prevMonth} className="text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+            </button>
+            <button onClick={nextMonth} className="text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {weekDays.map((d) => (
+            <div key={d} className="text-center text-[10px] font-bold text-on-surface-variant">{d}</div>
+          ))}
+        </div>
+        {rows}
+      </div>
+    );
+  };
+
+  // Helper para la vista semanal
+  const renderWeekView = () => {
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // Empezar en Lunes
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      days.push(addDays(weekStart, i));
+    }
+
+    const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM a 9 PM (21)
+
+    return (
+      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+        {/* Contenedor scrolleable principal */}
+        <div className="flex-1 overflow-y-auto relative">
+          
+          {/* Cabecera de días - STICKY */}
+          <div className="sticky top-0 z-30 grid grid-cols-8 border-b border-outline-variant bg-surface-container-lowest shadow-sm">
+            <div className="p-3 border-r border-outline-variant flex items-end justify-center">
+              <span className="text-xs text-on-surface-variant font-medium">GMT-3</span>
+            </div>
+            {days.map((day) => (
+              <div key={day.toString()} className="p-3 text-center border-r border-outline-variant last:border-0 flex flex-col items-center justify-center">
+                <span className="text-xs font-bold uppercase text-on-surface-variant">{format(day, 'EEE', { locale: es })}</span>
+                <span className={`text-2xl font-light mt-1 w-10 h-10 flex items-center justify-center rounded-full ${isToday(day) ? 'bg-primary text-on-primary' : 'text-on-surface'}`}>
+                  {format(day, 'd')}
+                </span>
+              </div>
+            ))}
+          </div>
+          
+          {/* Cuadrícula de horas */}
+          <div className="grid grid-cols-8 relative min-h-[800px]">
+            {/* Columna de Horas */}
+            <div className="border-r border-outline-variant flex flex-col">
+              {hours.map(hour => (
+                <div key={hour} className="h-20 border-b border-outline-variant/30 flex items-start justify-end p-2 text-xs text-on-surface-variant font-medium">
+                  {hour}:00
+                </div>
+              ))}
+            </div>
+            
+            {/* Columnas de Días */}
+            {days.map((day, dayIdx) => (
+              <div key={day.toString()} className="border-r border-outline-variant/30 last:border-0 relative">
+                {hours.map(hour => (
+                  <div 
+                    key={`${day}-${hour}`} 
+                    className="h-20 border-b border-outline-variant/30 hover:bg-surface-container-low/50 transition-colors cursor-pointer"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, dayIdx, hour)}
+                  >
+                  </div>
+                ))}
+
+                {/* Bloques No Hábiles */}
+                {unavailabilities
+                  .filter(u => u.dayOfWeek === getDay(day))
+                  .map((u, idx) => {
+                    const top = (u.startHour - 6) * 80;
+                    const height = (u.endHour - u.startHour) * 80;
+                    return (
+                      <div key={`unav-w-${dayIdx}-${idx}`} className="absolute left-0 right-0 bg-[repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6_10px,#ffffff_10px,#ffffff_20px)] border-y border-outline-variant/50 opacity-60 pointer-events-none flex items-center justify-center z-[5]" style={{ top: `${top}px`, height: `${height}px` }}>
+                         <span className="bg-surface/90 backdrop-blur-sm px-1.5 py-0.5 rounded text-[10px] font-bold text-on-surface-variant shadow-sm border border-outline-variant truncate max-w-[90%]">
+                           No Hábil
+                         </span>
+                      </div>
+                    );
+                  })
+                }
+
+                {/* Eventos */}
+                {events.filter(ev => ev.dayIdx === dayIdx).map(ev => {
+                  const top = (ev.startHour - 6) * 80;
+                  const height = ev.duration * 80;
+                  const colors = getEventColor(ev);
+                  return (
+                    <div 
+                      key={ev.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, ev)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => setSelectedAppointment(ev)}
+                      className={`absolute left-1 right-1 ${colors.lightBg} border ${colors.border} rounded-xl p-2 cursor-pointer hover:brightness-95 transition-colors shadow-sm z-10 flex flex-col overflow-hidden group`}
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      {ev.title && ev.title.trim() !== '' && (
+                        <div className="absolute top-1 right-1 bg-white px-1.5 py-0.5 rounded-full shadow-sm border border-outline-variant/30 text-[9px] font-semibold text-on-surface-variant z-10 flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${colors.bg}`}></span>
+                          {ev.title}
+                        </div>
+                      )}
+                      <p className={`text-xs font-bold ${colors.text} relative z-0`}>{ev.startHour}:00 - {ev.startHour + ev.duration}:00</p>
+                      <p className="text-xs text-on-surface-variant mt-auto font-medium truncate relative z-0">{ev.professional}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper para la vista de Día
+  const renderDayView = () => {
+    const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM a 9 PM (21)
+    
+    // Filtrar eventos según rol
+    const displayEvents = userRole === 'secretary' 
+      ? events 
+      : events.filter(ev => ev.professional_id === currentUserId);
+
+    const dayEvents = displayEvents.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'));
+
+    return (
+      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+        
+        {/* Contenedor scrolleable principal */}
+        <div className="flex-1 overflow-y-auto relative">
+          
+          {/* Cabecera del día - STICKY */}
+          <div className="sticky top-0 z-30 border-b border-outline-variant pl-16 bg-surface-container-lowest shadow-sm">
+            <div className="absolute left-0 top-0 w-16 h-full border-r border-outline-variant flex items-center justify-center bg-surface-container-lowest">
+              <span className="text-[10px] font-bold text-on-surface-variant">GMT-3</span>
+            </div>
+            <div className="p-4 text-center flex flex-col items-center justify-center">
+              <span className="text-xs font-bold uppercase text-on-surface-variant">{format(currentDate, 'EEEE', { locale: es })}</span>
+              <span className={`text-3xl font-light mt-1 w-12 h-12 flex items-center justify-center rounded-full ${isToday(currentDate) ? 'bg-primary text-on-primary' : 'text-on-surface'}`}>
+                {format(currentDate, 'd')}
+              </span>
+            </div>
+          </div>
+          
+          <div className="relative min-h-[800px] pl-16 w-full">
+            {/* Columna de Horas (Fija a la izquierda) */}
+            <div className="absolute left-0 top-0 w-16 h-full border-r border-outline-variant flex flex-col z-20 bg-surface-container-lowest pointer-events-none">
+              {hours.map(hour => (
+                <div key={hour} className="h-20 border-b border-outline-variant/30 flex items-start justify-end p-2 text-xs text-on-surface-variant font-medium bg-surface-container-lowest">
+                  {hour}:00
+                </div>
+              ))}
+            </div>
+            
+            {/* Columna del Día (Única) */}
+            <div className="relative w-full h-full">
+              {hours.map(hour => (
+                <div 
+                  key={`day-${hour}`} 
+                  className="h-20 border-b border-outline-variant/30 hover:bg-surface-container-low/50 transition-colors cursor-pointer w-full"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, 1, hour)}
+                >
+                </div>
+              ))}
+
+              {/* Bloques No Hábiles */}
+              {unavailabilities
+                .filter(u => u.dayOfWeek === getDay(currentDate))
+                .map((u, idx) => {
+                  const top = (u.startHour - 6) * 80;
+                  const height = (u.endHour - u.startHour) * 80;
+                  const prof = professionals.find(p => p.id === u.professional_id);
+                  return (
+                    <div key={`unav-d-${idx}`} className="absolute left-2 right-4 rounded-xl bg-[repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6_10px,#ffffff_10px,#ffffff_20px)] border border-outline-variant/50 opacity-70 pointer-events-none flex items-center justify-center z-[5]" style={{ top: `${top}px`, height: `${height}px` }}>
+                       <span className="bg-surface/90 backdrop-blur-sm px-3 py-1 rounded-lg text-xs font-bold text-on-surface-variant shadow-sm border border-outline-variant">
+                         Horario No Hábil • {prof?.name}
+                       </span>
+                    </div>
+                  );
+                })
+              }
+
+              {/* Eventos del día actual */}
+              {dayEvents.map(ev => {
+                const top = (ev.startHour - 6) * 80;
+                const height = ev.duration * 80;
+                const colors = getEventColor(ev);
+                
+                return (
+                  <div 
+                    key={ev.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, ev)}
+                    onDragEnd={handleDragEnd}
+                    className={`absolute left-2 right-4 ${colors.lightBg} border ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group`}
+                    style={{ top: `${top}px`, height: `${height}px` }}
+                  >
+                    {/* Etiqueta de la prestación simulando el Status pill */}
+                    {ev.title && ev.title.trim() !== '' && (
+                      <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-full shadow-sm border border-outline-variant/30 text-[10px] font-semibold text-on-surface-variant z-10 flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${colors.bg}`}></span>
+                        {ev.title}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-start justify-between mb-1 relative z-0">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors.bg} text-white shadow-sm`}>
+                          <span className="material-symbols-outlined text-[18px]">
+                            {ev.title === 'Ortodoncia' ? 'dentistry' : ev.title === 'Implantes' ? 'medical_services' : 'person'}
+                          </span>
+                        </div>
+                        <div className="pt-0.5">
+                          <span className="text-sm font-bold text-on-surface block leading-tight">{ev.patient}</span>
+                          <span className={`text-xs font-bold ${colors.text} opacity-90`}>
+                            {ev.startHour}:00 - {ev.startHour + ev.duration}:00
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-auto flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
+                       <span className="bg-surface-container-lowest text-[10px] font-bold px-2 py-0.5 rounded border border-outline-variant text-on-surface-variant truncate max-w-[100px] shadow-sm">
+                         {ev.professional}
+                       </span>
+                       <div className="flex gap-2 relative z-20">
+                         <Link href={`/patients/${ev.patient_id}`} className="w-8 h-8 bg-surface-container-lowest hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant" title="Ver Paciente">
+                            <span className="material-symbols-outlined text-[16px]">person</span>
+                         </Link>
+                         <button onClick={(e) => { e.stopPropagation(); setSelectedAppointment(ev); }} className="w-8 h-8 bg-surface-container-lowest hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant" title="Gestionar Turno">
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                         </button>
+                       </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Helper para la vista de Mes
+  const renderMonthView = () => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(monthStart);
+    const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    
+    const rows = [];
+    let days = [];
+    let day = startDate;
+    let formattedDate = "";
+    
+    const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+    while (day <= endDate) {
+      for (let i = 0; i < 7; i++) {
+        formattedDate = format(day, 'd');
+        const cloneDay = day;
+        const isCurrentMonth = isSameMonth(day, monthStart);
+        const dayEvents = events.filter(ev => ev.date === format(day, 'yyyy-MM-dd'));
+        
+        days.push(
+          <div
+            key={day.toString()}
+            className={`min-h-[140px] p-2 border-r border-b border-outline-variant/30 flex flex-col transition-colors cursor-pointer ${
+              !isCurrentMonth ? "bg-surface-container-lowest/50" : "hover:bg-surface-container-low/30"
+            }`}
+            onClick={() => {
+              setCurrentDate(cloneDay);
+              setView('day'); // Al hacer clic en un día del mes, vamos a la vista de día
+            }}
+          >
+            <div className="flex justify-end mb-1">
+              <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${
+                !isCurrentMonth ? "text-on-surface-variant/40" : isSameDay(day, new Date()) ? "bg-primary text-on-primary" : "text-on-surface"
+              }`}>
+                {formattedDate}
+              </span>
+            </div>
+            {/* Indicadores de eventos de prueba para el mes */}
+            <div className="flex-1 flex flex-col gap-1 overflow-y-auto">
+              {dayEvents.map(ev => {
+                const colors = getEventColor(ev);
+                return (
+                  <div key={ev.id} className={`w-full ${colors.bg} text-white text-[10px] font-bold px-1.5 py-0.5 rounded truncate shadow-sm`}>
+                    {ev.startHour}:00 {ev.title}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+        day = addDays(day, 1);
+      }
+      rows.push(
+        <div className="grid grid-cols-7 flex-1" key={day.toString()}>
+          {days}
+        </div>
+      );
+      days = [];
+    }
+
+    return (
+      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-outline-variant">
+          {weekDays.map((d) => (
+            <div key={d} className="p-3 text-center border-r border-outline-variant/30 last:border-0">
+              <span className="text-xs font-bold uppercase text-on-surface-variant">{d}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex-1 flex flex-col">
+          {rows}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="h-[calc(100vh-80px)] md:h-screen w-full flex flex-col md:flex-row bg-surface overflow-hidden animate-in fade-in duration-500">
+      
+      {/* Sidebar Izquierdo de la Agenda */}
+      <div className="w-full md:w-72 bg-surface-container-lowest border-r border-outline-variant flex flex-col p-4 gap-6 overflow-y-auto">
+        
+        {/* Controles y Nuevo Evento */}
+        <div className="flex items-center justify-between">
+          <button 
+            onClick={() => setIsNewAppointmentModalOpen(true)}
+            className="bg-primary text-on-primary w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:bg-primary/90 transition-all active:scale-95 font-bold text-sm"
+          >
+            <span className="material-symbols-outlined text-[20px]">calendar_add_on</span>
+            Agendar Nuevo Turno
+          </button>
+        </div>
+
+        {/* Mini Calendario */}
+        {renderMiniCalendar()}
+
+        {/* Filtros de Profesionales */}
+        <div>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant">
+              Profesionales
+            </h3>
+            <button 
+              onClick={() => setIsAvailabilityModalOpen(!isAvailabilityModalOpen)}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors shadow-sm ${isAvailabilityModalOpen ? 'bg-primary text-white' : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant'}`}
+              title="Configurar Disponibilidad"
+            >
+              <span className="material-symbols-outlined text-[14px]">settings</span>
+            </button>
+          </div>
+
+          {isAvailabilityModalOpen && (
+            <div className="mb-4 bg-surface-container-lowest border border-outline-variant rounded-xl p-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+              <h4 className="text-xs font-bold text-on-surface mb-2">Horarios No Hábiles</h4>
+              
+              <div className="space-y-2 max-h-32 overflow-y-auto mb-3">
+                {unavailabilities.length === 0 ? (
+                  <p className="text-[10px] text-on-surface-variant text-center py-2">Sin horarios bloqueados</p>
+                ) : (
+                  unavailabilities.map((u, i) => {
+                    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                    return (
+                      <div key={i} className="flex items-center justify-between bg-surface p-1.5 rounded border border-outline-variant shadow-sm text-[10px]">
+                        <span className="font-semibold">{days[u.dayOfWeek]}: {u.startHour}:00 - {u.endHour}:00</span>
+                        <button 
+                          onClick={() => {
+                            const updated = unavailabilities.filter((_, idx) => idx !== i);
+                            setUnavailabilities(updated);
+                            localStorage.setItem('clinic_unavailabilities', JSON.stringify(updated));
+                          }}
+                          className="text-error hover:bg-error/10 w-5 h-5 rounded-full flex items-center justify-center"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">close</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const day = parseInt((form.elements.namedItem('day') as HTMLSelectElement).value);
+                const start = parseInt((form.elements.namedItem('start') as HTMLSelectElement).value);
+                const end = parseInt((form.elements.namedItem('end') as HTMLSelectElement).value);
+                
+                if (start >= end) {
+                  alert("Inicio debe ser menor a fin");
+                  return;
+                }
+                
+                const updated = [...unavailabilities, { professional_id: '1', dayOfWeek: day, startHour: start, endHour: end }];
+                setUnavailabilities(updated);
+                localStorage.setItem('clinic_unavailabilities', JSON.stringify(updated));
+              }} className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold text-on-surface-variant mb-0.5">Día</label>
+                    <select name="day" className="w-full bg-surface border border-outline-variant rounded-md py-1 px-1 text-[10px]">
+                      <option value="1">Lun</option><option value="2">Mar</option><option value="3">Mié</option>
+                      <option value="4">Jue</option><option value="5">Vie</option><option value="6">Sáb</option><option value="0">Dom</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-on-surface-variant mb-0.5">Inicio - Fin</label>
+                    <div className="flex items-center gap-1">
+                      <select name="start" className="w-full bg-surface border border-outline-variant rounded-md py-1 px-0.5 text-[10px]">
+                        {Array.from({length: 15}, (_, i) => i + 6).map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      <span className="text-[10px]">-</span>
+                      <select name="end" className="w-full bg-surface border border-outline-variant rounded-md py-1 px-0.5 text-[10px]" defaultValue="14">
+                        {Array.from({length: 15}, (_, i) => i + 7).map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" className="bg-primary text-white w-full py-1.5 rounded-md flex items-center justify-center hover:bg-primary/90 shadow-sm text-[10px] font-bold">
+                  Agregar Bloqueo
+                </button>
+              </form>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {professionals.map((prof) => (
+              <label key={prof.id} className="flex items-center gap-3 px-2 py-1.5 hover:bg-surface-container-low rounded-lg cursor-pointer transition-colors">
+                <input type="checkbox" className="w-4 h-4 rounded text-primary border-outline focus:ring-primary" defaultChecked />
+                <span className="font-body-sm text-sm text-on-surface">{prof.name}</span>
+              </label>
+            ))}
+            {professionals.length === 0 && (
+              <div className="text-xs text-on-surface-variant px-2">Cargando profesionales...</div>
+            )}
+          </div>
+        </div>
+
+        {/* Categorías de Prestación */}
+        <div>
+          <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant mb-3 px-1 flex items-center justify-between">
+            Prestaciones
+            <span className="material-symbols-outlined text-[18px] cursor-pointer">keyboard_arrow_down</span>
+          </h3>
+          <div className="space-y-2 mb-3">
+            {services.map((srv) => (
+              <div key={srv.name} className="flex items-center justify-between group px-2 py-1 hover:bg-surface-container-low rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${srv.color}`}></div>
+                  <span className="font-body-sm text-sm text-on-surface">{srv.name}</span>
+                </div>
+                <button 
+                  onClick={() => handleDeleteService(srv.name)}
+                  className="opacity-0 group-hover:opacity-100 text-error hover:bg-error/10 w-6 h-6 rounded-full flex items-center justify-center transition-all"
+                >
+                  <span className="material-symbols-outlined text-[14px]">delete</span>
+                </button>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleAddService} className="flex items-center gap-2 px-1">
+            <input 
+              type="text" 
+              value={newServiceName}
+              onChange={(e) => setNewServiceName(e.target.value)}
+              placeholder="Nueva prestación..."
+              className="flex-1 bg-surface border border-outline-variant rounded-lg px-2 py-1 text-xs outline-none focus:border-primary transition-colors"
+            />
+            <button type="submit" className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors">
+              <span className="material-symbols-outlined text-[16px]">add</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Área Principal del Calendario */}
+      <div className="flex-1 flex flex-col bg-surface overflow-visible md:overflow-hidden relative">
+        
+        {/* Fondo de color suave degradado tipo screenshot */}
+        <div className="absolute top-0 left-0 w-full h-48 bg-gradient-to-b from-primary-container/30 to-transparent pointer-events-none"></div>
+
+        {/* Banner de Próximo Paciente */}
+        {nextEvent && (
+          <div className="mx-6 mt-6 mb-2 bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between shadow-sm relative z-10 animate-in slide-in-from-top-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white shadow-sm">
+                <span className="material-symbols-outlined text-[20px]">notifications_active</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-primary mb-0.5">Recordatorio: Próximo Turno a las {nextEvent.startHour}:00</p>
+                <p className="text-sm font-medium text-on-surface">Paciente: <strong className="font-bold">{nextEvent.patient}</strong> • {nextEvent.title}</p>
+              </div>
+            </div>
+            <button onClick={() => setSelectedAppointment(nextEvent)} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-xl shadow-sm hover:bg-primary/90 transition-colors">
+              Ver Detalles
+            </button>
+          </div>
+        )}
+
+        {/* Header Principal */}
+        <div className={`px-6 flex items-center justify-between relative z-10 ${nextEvent ? 'h-16' : 'h-20 mt-4'}`}>
+          <div className="flex items-center gap-4">
+            <h2 className="font-display-sm text-display-sm capitalize text-on-surface">
+              {format(currentDate, 'MMMM yyyy', { locale: es })}
+            </h2>
+            <button onClick={goToToday} className="px-3 py-1 bg-surface-container-high rounded-full text-xs font-bold hover:bg-primary-container transition-colors">
+              Hoy
+            </button>
+            <div className="flex gap-1 ml-2">
+              <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+              </button>
+              <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex bg-surface-container-low p-1 rounded-xl shadow-sm border border-outline-variant">
+            <button 
+              onClick={() => setView('day')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'day' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              Día
+            </button>
+            <button 
+              onClick={() => setView('week')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'week' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              Semana
+            </button>
+            <button 
+              onClick={() => setView('month')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'month' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+            >
+              Mes
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 p-6 relative z-10 overflow-visible md:overflow-hidden flex flex-col">
+          {view === 'week' && renderWeekView()}
+          {view === 'day' && renderDayView()}
+          {view === 'month' && renderMonthView()}
+        </div>
+      </div>
+    </div>
+
+      {/* Modal de Detalle de Cita */}
+      {selectedAppointment && (
+        <Portal>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 px-4">
+          <div className="bg-surface w-full max-w-[420px] rounded-[2rem] p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setSelectedAppointment(null)}
+              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+            
+            <div className="flex items-center gap-3 mb-4 pr-10">
+              <div className={`w-3 h-10 rounded-full ${selectedAppointment.color}`}></div>
+              <div>
+                <h2 className="font-title-md text-xl font-bold text-on-surface leading-tight">{selectedAppointment.title}</h2>
+                <p className="text-sm font-medium text-on-surface-variant">{selectedAppointment.type}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-4 mb-6">
+              <div className="flex items-center gap-3 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[20px]">schedule</span>
+                <span className="font-medium text-sm">{format(currentDate, 'dd/MM/yyyy')} • {selectedAppointment.startHour}:00 - {selectedAppointment.startHour + selectedAppointment.duration}:00</span>
+              </div>
+              <div className="flex items-center gap-3 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[20px]">person</span>
+                <span className="font-medium text-sm">Paciente: <strong className="text-on-surface">{selectedAppointment.patient}</strong></span>
+              </div>
+              <div className="flex items-center gap-3 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[20px]">stethoscope</span>
+                <span className="font-medium text-sm">Profesional: {selectedAppointment.professional}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-[#34D399]/20 text-[#10B981] hover:bg-[#34D399]/30 transition-colors border border-[#34D399]/30 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">check_circle</span> Asistió
+              </button>
+              <button className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-error/10 text-error hover:bg-error/20 transition-colors border border-error/20 flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">cancel</span> Ausente
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  setSelectedAppointment(null);
+                  setIsNewAppointmentModalOpen(true);
+                  // Notamos que no se puede editar directamente sin más trabajo, así que abrimos el modal para reagendar por ahora
+                }}
+                className="flex-1 py-3 px-2 rounded-xl font-label-sm text-xs bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex flex-col items-center justify-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[20px]">edit</span> Editar
+              </button>
+              <button 
+                onClick={() => {
+                  setAlertDialog({
+                    isOpen: true,
+                    title: 'Borrar Turno',
+                    message: '¿Estás seguro de que deseas eliminar este turno?',
+                    type: 'confirm',
+                    confirmText: 'Borrar',
+                    onConfirm: async () => {
+                      // Optimistic delete
+                      setEvents(events.filter(e => e.id !== selectedAppointment.id));
+                      setAlertDialog(prev => ({ ...prev, isOpen: false }));
+                      setSelectedAppointment(null);
+                      
+                      const { error } = await supabase.from('appointments').delete().eq('id', selectedAppointment.id);
+                      if (error) {
+                        fetchCalendarData(); // Revert on failure
+                        showAlert('Error al borrar de la BD: ' + error.message);
+                      }
+                    }
+                  });
+                }}
+                className="flex-1 py-3 px-2 rounded-xl font-label-sm text-xs bg-error/10 hover:bg-error/20 text-error transition-colors flex flex-col items-center justify-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[20px]">delete</span> Borrar
+              </button>
+              <Link 
+                href={`/patients/${selectedAppointment.patient_id}`}
+                className="flex-[2] py-3 px-4 rounded-xl font-label-sm text-sm bg-primary hover:bg-primary/90 text-on-primary transition-colors shadow-sm flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[18px]">medical_information</span> Historia Clínica
+              </Link>
+            </div>
+          </div>
+        </div>
+        </Portal>
+      )}
+
+      <NewAppointmentModal 
+        isOpen={isNewAppointmentModalOpen}
+        services={services}
+        onClose={() => setIsNewAppointmentModalOpen(false)}
+        onSuccess={() => {
+          setIsNewAppointmentModalOpen(false);
+          fetchCalendarData();
+        }}
+      />
+
+      <AlertDialog 
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type={alertDialog.type}
+        onConfirm={alertDialog.onConfirm}
+        onCancel={() => setAlertDialog(prev => ({ ...prev, isOpen: false }))}
+        confirmText={alertDialog.confirmText}
+      />
+    </>
+  );
+}

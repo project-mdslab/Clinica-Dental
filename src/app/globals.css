@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@theme {
+  --color-secondary: #6a5c4c;
+  --color-on-primary-fixed-variant: #544435;
+  --color-tertiary-fixed: #ebe1d5;
+  --color-surface-container-highest: #e3e2df;
+  --color-surface-container: #efeeeb;
+  --color-inverse-on-surface: #f2f1ee;
+  --color-outline-variant: #d1c4bb;
+  --color-outline: #7f756d;
+  --color-on-error-container: #93000a;
+  --color-primary-container: #bca693;
+  --color-on-secondary-container: #706252;
+  --color-primary-fixed: #f7dec9;
+  --color-on-error: #ffffff;
+  --color-on-primary-container: #4b3c2d;
+  --color-surface-container-low: #f5f3f0;
+  --color-inverse-primary: #dac2ae;
+  --color-surface-dim: #dbdad7;
+  --color-on-background: #1b1c1a;
+  --color-secondary-fixed: #f3dfcb;
+  --color-error: #ba1a1a;
+  --color-on-secondary-fixed: #241a0e;
+  --color-secondary-container: #f3dfcb;
+  --color-inverse-surface: #2f312f;
+  --color-surface-variant: #e3e2df;
+  --color-on-primary-fixed: #25190c;
+  --color-on-secondary-fixed-variant: #514536;
+  --color-on-primary: #ffffff;
+  --color-on-surface-variant: #4e453e;
+  --color-primary-fixed-dim: #dac2ae;
+  --color-on-secondary: #ffffff;
+  --color-secondary-fixed-dim: #d6c3b0;
+  --color-error-container: #ffdad6;
+  --color-surface-container-high: #e9e8e5;
+  --color-surface: #faf9f6;
+  --color-on-tertiary-fixed: #1f1b14;
+  --color-tertiary: #645d54;
+  --color-surface-container-lowest: #ffffff;
+  --color-tertiary-fixed-dim: #cec5ba;
+  --color-background: #faf9f6;
+  --color-surface-bright: #faf9f6;
+  --color-on-surface: #1b1c1a;
+  --color-tertiary-container: #b1a99e;
+  --color-on-tertiary-container: #433e35;
+  --color-primary: #6d5b4b;
+  --color-surface-tint: #6d5b4b;
+
+  /* Colores de Marca Bina */
+  --color-bina-taupe: #7A6F66;
+  --color-bina-crema: #F5EFEB;
+  --color-bina-madera: #C49A6C;
+  --color-bina-gris: #8E918F;
+  --color-bina-blanco: #FFFFFF;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-fixed-variant: #4c463d;
+
+  --radius-DEFAULT: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+
+  --spacing-base: 8px;
+  --spacing-xs: 4px;
+  --spacing-xl: 80px;
+  --spacing-gutter: 24px;
+  --spacing-sm: 12px;
+  --spacing-md: 24px;
+  --spacing-margin-mobile: 16px;
+  --spacing-lg: 48px;
+  --spacing-margin-desktop: 64px;
+
+  --font-headline-xl: Poppins, sans-serif;
+  --font-body-md: Poppins, sans-serif;
+  --font-label-sm: Poppins, sans-serif;
+  --font-label-md: Poppins, sans-serif;
+  --font-headline-lg-mobile: Poppins, sans-serif;
+  --font-headline-lg: Poppins, sans-serif;
+  --font-headline-md: Poppins, sans-serif;
+  --font-body-lg: Poppins, sans-serif;
+
+  --text-headline-xl: 48px;
+  --text-headline-xl--line-height: 1.2;
+  --text-headline-xl--letter-spacing: -0.02em;
+  --text-headline-xl--font-weight: 600;
+
+  --text-body-md: 16px;
+  --text-body-md--line-height: 1.6;
+  --text-body-md--font-weight: 400;
+
+  --text-label-sm: 12px;
+  --text-label-sm--line-height: 1.2;
+  --text-label-sm--font-weight: 400;
+
+  --text-label-md: 14px;
+  --text-label-md--line-height: 1.2;
+  --text-label-md--letter-spacing: 0.05em;
+  --text-label-md--font-weight: 500;
+
+  --text-headline-lg-mobile: 28px;
+  --text-headline-lg-mobile--line-height: 1.3;
+  --text-headline-lg-mobile--font-weight: 600;
+
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 1.3;
+  --text-headline-lg--font-weight: 600;
+
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 1.4;
+  --text-headline-md--font-weight: 500;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 1.6;
+  --text-body-lg--font-weight: 400;
+}
+
+@layer base {
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-body-md);
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+  }
+}
+
+@layer utilities {
+  .tooth-segment { 
+    transition: all 0.2s ease; 
+    cursor: pointer; 
+  }
+  .tooth-segment:hover { 
+    fill: var(--color-primary-container); 
+  }
+  .tooth-selected { 
+    fill: var(--color-primary) !important; 
+  }
+  .no-scrollbar::-webkit-scrollbar { 
+    display: none; 
+  }
+  .no-scrollbar { 
+    -ms-overflow-style: none; 
+    scrollbar-width: none; 
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid #EDE3D7;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+}
