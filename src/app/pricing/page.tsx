@@ -378,8 +378,8 @@ export default function PricingPage() {
           </div>
 
           <div className="flex-1 overflow-auto p-6">
-            <div className="bg-surface rounded-2xl shadow-sm border border-outline-variant/30 overflow-hidden">
-              <table className="w-full text-left border-collapse">
+            <div className="bg-surface rounded-2xl shadow-sm border border-outline-variant/30 overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead className="bg-surface-container/50">
                   <tr>
                     <th className="py-4 px-6 font-bold text-sm text-on-surface-variant border-b border-outline-variant/30 w-32">Código</th>

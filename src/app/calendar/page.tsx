@@ -12,9 +12,11 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentTime] = useState(new Date());
   
-  // Estados de Usuario
   const [userRole, setUserRole] = useState<'secretary' | 'professional'>('secretary');
   const [currentUserId, setCurrentUserId] = useState('');
+  
+  // Estado de Sincronización
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Instancia de Supabase
   const supabase = createClient();
@@ -26,6 +28,7 @@ export default function CalendarPage() {
   const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // Prestaciones dinámicas
   const [services, setServices] = useState<{name: string, color: string}[]>([]);
@@ -121,15 +124,13 @@ export default function CalendarPage() {
     if (storedUnav) {
       setUnavailabilities(JSON.parse(storedUnav));
     } else {
-      const defaultUnav = [
-        { professional_id: '1', dayOfWeek: 1, startHour: 6, endHour: 14 }, // Lunes (6 a 14)
-        { professional_id: '1', dayOfWeek: 2, startHour: 6, endHour: 14 }, // Martes
-        { professional_id: '1', dayOfWeek: 3, startHour: 6, endHour: 14 }, // Miércoles
-        { professional_id: '1', dayOfWeek: 4, startHour: 6, endHour: 14 }, // Jueves
-        { professional_id: '1', dayOfWeek: 5, startHour: 6, endHour: 14 }, // Viernes
-      ];
-      setUnavailabilities(defaultUnav);
-      localStorage.setItem('clinic_unavailabilities', JSON.stringify(defaultUnav));
+      setUnavailabilities([]);
+      localStorage.setItem('clinic_unavailabilities', JSON.stringify([]));
+    }
+
+    // Set mobile view
+    if (window.innerWidth < 768) {
+      setView('day');
     }
   }, []);
 
@@ -316,12 +317,12 @@ export default function CalendarPage() {
     const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM a 9 PM (21)
 
     return (
-      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+      <div className="flex flex-col md:h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm md:overflow-hidden overflow-visible">
         {/* Contenedor scrolleable principal */}
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 md:overflow-y-auto relative">
           
           {/* Cabecera de días - STICKY */}
-          <div className="sticky top-0 z-30 grid grid-cols-8 border-b border-outline-variant bg-surface-container-lowest shadow-sm">
+          <div className="sticky top-[80px] md:top-0 z-30 grid grid-cols-8 border-b border-outline-variant bg-surface-container-lowest shadow-sm">
             <div className="p-3 border-r border-outline-variant flex items-end justify-center">
               <span className="text-xs text-on-surface-variant font-medium">GMT-3</span>
             </div>
@@ -420,22 +421,51 @@ export default function CalendarPage() {
 
     const dayEvents = displayEvents.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'));
 
+    const weekStartDay = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStartDay, i));
+
     return (
-      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+      <div className="flex flex-col md:h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm md:overflow-hidden overflow-visible">
         
         {/* Contenedor scrolleable principal */}
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 md:overflow-y-auto relative">
           
-          {/* Cabecera del día - STICKY */}
-          <div className="sticky top-0 z-30 border-b border-outline-variant pl-16 bg-surface-container-lowest shadow-sm">
-            <div className="absolute left-0 top-0 w-16 h-full border-r border-outline-variant flex items-center justify-center bg-surface-container-lowest">
-              <span className="text-[10px] font-bold text-on-surface-variant">GMT-3</span>
+          {/* Cabecera del día (Semana Horizontal) - STICKY */}
+          <div className="sticky top-[80px] md:top-0 z-30 border-b border-outline-variant bg-surface-container-lowest shadow-sm pt-2 pb-3">
+            <div className="flex items-center justify-between px-4 pb-2 md:hidden">
+              <span className="font-bold text-on-surface capitalize text-sm">{format(currentDate, 'MMMM yyyy', { locale: es })}</span>
+              <button 
+                onClick={() => setIsMobileFiltersOpen(true)}
+                className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center transition-transform active:scale-95 border border-outline-variant/50"
+              >
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+              </button>
             </div>
-            <div className="p-4 text-center flex flex-col items-center justify-center">
-              <span className="text-xs font-bold uppercase text-on-surface-variant">{format(currentDate, 'EEEE', { locale: es })}</span>
-              <span className={`text-3xl font-light mt-1 w-12 h-12 flex items-center justify-center rounded-full ${isToday(currentDate) ? 'bg-primary text-on-primary' : 'text-on-surface'}`}>
-                {format(currentDate, 'd')}
-              </span>
+            <div className="flex items-center justify-between px-2 md:pl-16 overflow-x-auto no-scrollbar gap-1">
+              {weekDays.map((day) => {
+                const isSelected = isSameDay(day, currentDate);
+                const isCurrentToday = isToday(day);
+                return (
+                  <div 
+                    key={day.toString()} 
+                    onClick={() => setCurrentDate(day)}
+                    className="flex flex-col items-center justify-center cursor-pointer min-w-[12%] md:min-w-0 md:flex-1 gap-1 py-1"
+                  >
+                    <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-primary' : 'text-on-surface-variant'}`}>
+                      {format(day, 'EEE', { locale: es })}
+                    </span>
+                    <span className={`text-lg font-medium w-9 h-9 flex items-center justify-center rounded-full transition-all ${
+                      isSelected 
+                        ? 'bg-primary text-white shadow-md scale-110' 
+                        : isCurrentToday 
+                          ? 'bg-primary/15 text-primary font-bold' 
+                          : 'text-on-surface hover:bg-surface-container-high'
+                    }`}>
+                      {format(day, 'd')}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
           
@@ -483,6 +513,9 @@ export default function CalendarPage() {
                 const top = (ev.startHour - 6) * 80;
                 const height = ev.duration * 80;
                 const colors = getEventColor(ev);
+                // Adjust border logic for left-only thick border
+                const leftBorderColor = colors.border.replace('border-', 'border-l-'); // e.g. border-pink-300 -> border-l-pink-300 (wait, tailwind might not support this dynamically if not pre-compiled, let's use style for the left border color or just rely on existing standard colors).
+                // It's safer to just set border-l-[4px] and the border color class.
                 
                 return (
                   <div 
@@ -490,12 +523,12 @@ export default function CalendarPage() {
                     draggable
                     onDragStart={(e) => handleDragStart(e, ev)}
                     onDragEnd={handleDragEnd}
-                    className={`absolute left-2 right-4 ${colors.lightBg} border ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group`}
+                    className={`absolute left-2 right-4 ${colors.lightBg} border-y border-r border-l-4 ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group`}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
                     {/* Etiqueta de la prestación simulando el Status pill */}
                     {ev.title && ev.title.trim() !== '' && (
-                      <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded-full shadow-sm border border-outline-variant/30 text-[10px] font-semibold text-on-surface-variant z-10 flex items-center gap-1.5">
+                      <div className="absolute top-2 right-2 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-full shadow-sm border border-outline-variant/30 text-[10px] font-semibold text-on-surface-variant z-10 flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${colors.bg}`}></span>
                         {ev.title}
                       </div>
@@ -503,30 +536,30 @@ export default function CalendarPage() {
                     
                     <div className="flex items-start justify-between mb-1 relative z-0">
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors.bg} text-white shadow-sm`}>
-                          <span className="material-symbols-outlined text-[18px]">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center ${colors.bg} text-white shadow-sm opacity-90`}>
+                          <span className="material-symbols-outlined text-[14px]">
                             {ev.title === 'Ortodoncia' ? 'dentistry' : ev.title === 'Implantes' ? 'medical_services' : 'person'}
                           </span>
                         </div>
                         <div className="pt-0.5">
-                          <span className="text-sm font-bold text-on-surface block leading-tight">{ev.patient}</span>
-                          <span className={`text-xs font-bold ${colors.text} opacity-90`}>
+                          <span className="text-sm font-bold text-on-surface block leading-tight truncate max-w-[150px]">{ev.patient}</span>
+                          <span className={`text-[10px] font-bold ${colors.text} opacity-80`}>
                             {ev.startHour}:00 - {ev.startHour + ev.duration}:00
                           </span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="mt-auto flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
-                       <span className="bg-surface-container-lowest text-[10px] font-bold px-2 py-0.5 rounded border border-outline-variant text-on-surface-variant truncate max-w-[100px] shadow-sm">
+                    <div className="mt-auto flex justify-between items-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                       <span className="bg-white/60 text-[10px] font-bold px-2 py-0.5 rounded text-on-surface-variant truncate max-w-[120px] shadow-sm">
                          {ev.professional}
                        </span>
-                       <div className="flex gap-2 relative z-20">
-                         <Link href={`/patients/${ev.patient_id}`} className="w-8 h-8 bg-surface-container-lowest hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant" title="Ver Paciente">
-                            <span className="material-symbols-outlined text-[16px]">person</span>
+                       <div className="flex gap-1.5 relative z-20">
+                         <Link href={`/patients/${ev.patient_id}`} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Ver Paciente">
+                            <span className="material-symbols-outlined text-[14px]">person</span>
                          </Link>
-                         <button onClick={(e) => { e.stopPropagation(); setSelectedAppointment(ev); }} className="w-8 h-8 bg-surface-container-lowest hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant" title="Gestionar Turno">
-                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                         <button onClick={(e) => { e.stopPropagation(); setSelectedAppointment(ev); }} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Gestionar Turno">
+                            <span className="material-symbols-outlined text-[14px]">edit</span>
                          </button>
                        </div>
                     </div>
@@ -603,7 +636,7 @@ export default function CalendarPage() {
     }
 
     return (
-      <div className="flex flex-col h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm overflow-hidden">
+      <div className="flex flex-col md:h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm md:overflow-hidden overflow-visible">
         <div className="grid grid-cols-7 border-b border-outline-variant">
           {weekDays.map((d) => (
             <div key={d} className="p-3 text-center border-r border-outline-variant/30 last:border-0">
@@ -618,27 +651,26 @@ export default function CalendarPage() {
     );
   };
 
-  return (
+  const renderSidebarTop = () => (
+    <div className="flex flex-col gap-3">
+      {/* Controles */}
+      <div className="flex flex-col gap-2">
+        <button 
+          onClick={() => setIsNewAppointmentModalOpen(true)}
+          className="bg-primary text-on-primary w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:bg-primary/90 transition-all active:scale-95 font-bold text-sm"
+        >
+          <span className="material-symbols-outlined text-[20px]">calendar_add_on</span>
+          Agendar Nuevo Turno
+        </button>
+      </div>
+
+      {/* Mini Calendario */}
+      {renderMiniCalendar()}
+    </div>
+  );
+
+  const renderSidebarContent = () => (
     <>
-      <div className="h-[calc(100vh-80px)] md:h-screen w-full flex flex-col md:flex-row bg-surface overflow-hidden animate-in fade-in duration-500">
-      
-      {/* Sidebar Izquierdo de la Agenda */}
-      <div className="w-full md:w-72 bg-surface-container-lowest border-r border-outline-variant flex flex-col p-4 gap-6 overflow-y-auto">
-        
-        {/* Controles y Nuevo Evento */}
-        <div className="flex items-center justify-between">
-          <button 
-            onClick={() => setIsNewAppointmentModalOpen(true)}
-            className="bg-primary text-on-primary w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:bg-primary/90 transition-all active:scale-95 font-bold text-sm"
-          >
-            <span className="material-symbols-outlined text-[20px]">calendar_add_on</span>
-            Agendar Nuevo Turno
-          </button>
-        </div>
-
-        {/* Mini Calendario */}
-        {renderMiniCalendar()}
-
         {/* Filtros de Profesionales */}
         <div>
           <div className="flex items-center justify-between mb-3 px-1">
@@ -775,6 +807,37 @@ export default function CalendarPage() {
             </button>
           </form>
         </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className="min-h-[calc(100vh-160px)] md:h-screen w-full flex flex-col md:flex-row bg-surface overflow-visible md:overflow-hidden animate-in fade-in duration-500">
+      
+      {/* Sidebar Izquierdo de la Agenda */}
+      <div className="hidden md:flex w-72 bg-surface-container-lowest border-r border-outline-variant flex-col p-4 gap-6 overflow-y-auto">
+        <div className="flex bg-surface-container-low p-1 rounded-xl shadow-sm border border-outline-variant">
+          <button 
+            onClick={() => setView('day')}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'day' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+          >
+            Día
+          </button>
+          <button 
+            onClick={() => setView('week')}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'week' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+          >
+            Semana
+          </button>
+          <button 
+            onClick={() => setView('month')}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'month' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+          >
+            Mes
+          </button>
+        </div>
+        {renderSidebarTop()}
+        {renderSidebarContent()}
       </div>
 
       {/* Área Principal del Calendario */}
@@ -801,8 +864,13 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Header Principal */}
-        <div className={`px-6 flex items-center justify-between relative z-10 ${nextEvent ? 'h-16' : 'h-20 mt-4'}`}>
+        {/* Elementos superiores en móvil (Botón y Mini-calendario) */}
+        <div className="md:hidden px-6 pt-4 flex flex-col gap-4 relative z-10 animate-in fade-in slide-in-from-top-4">
+          {renderSidebarTop()}
+        </div>
+
+        {/* Header Principal (Oculto en Móvil según preferencia del usuario) */}
+        <div className={`hidden md:flex px-6 items-center relative z-10 ${nextEvent ? 'h-16' : 'h-20 mt-4'}`}>
           <div className="flex items-center gap-4">
             <h2 className="font-display-sm text-display-sm capitalize text-on-surface">
               {format(currentDate, 'MMMM yyyy', { locale: es })}
@@ -819,36 +887,52 @@ export default function CalendarPage() {
               </button>
             </div>
           </div>
-
-          <div className="flex bg-surface-container-low p-1 rounded-xl shadow-sm border border-outline-variant">
-            <button 
-              onClick={() => setView('day')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'day' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Día
-            </button>
-            <button 
-              onClick={() => setView('week')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'week' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Semana
-            </button>
-            <button 
-              onClick={() => setView('month')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === 'month' ? 'bg-surface shadow text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Mes
-            </button>
-          </div>
         </div>
 
         <div className="flex-1 p-6 relative z-10 overflow-visible md:overflow-hidden flex flex-col">
           {view === 'week' && renderWeekView()}
           {view === 'day' && renderDayView()}
           {view === 'month' && renderMonthView()}
+
+          {/* Mobile FABs */}
+          <div className="md:hidden fixed bottom-24 right-6 flex flex-col gap-3 z-50">
+            <button 
+              onClick={() => setIsNewAppointmentModalOpen(true)}
+              className="w-14 h-14 rounded-full bg-primary text-on-primary shadow-lg flex items-center justify-center transition-transform active:scale-95"
+              title="Agendar Nuevo Turno"
+            >
+              <span className="material-symbols-outlined text-[28px]">add</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
+
+    {/* Mobile Filters Drawer */}
+    {isMobileFiltersOpen && (
+      <Portal>
+        <div className="fixed inset-0 z-[100] flex md:hidden">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setIsMobileFiltersOpen(false)}
+          ></div>
+          <div className="w-[85vw] h-full bg-surface-container-lowest shadow-2xl relative z-10 animate-in slide-in-from-left duration-300 flex flex-col overflow-y-auto">
+            <div className="p-4 border-b border-outline-variant/30 flex items-center justify-between sticky top-0 bg-surface-container-lowest z-20">
+              <h2 className="font-title-md text-lg font-bold text-on-surface">Opciones</h2>
+              <button 
+                onClick={() => setIsMobileFiltersOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-6">
+              {renderSidebarContent()}
+            </div>
+          </div>
+        </div>
+      </Portal>
+    )}
 
       {/* Modal de Detalle de Cita */}
       {selectedAppointment && (
