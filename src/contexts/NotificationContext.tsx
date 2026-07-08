@@ -46,7 +46,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Load preferences and notifications from local storage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setPermissionGranted(Notification.permission === 'granted');
+      if ('Notification' in window) {
+        setPermissionGranted(Notification.permission === 'granted');
+      }
       
       const storedPrefs = localStorage.getItem('bina_notification_prefs');
       if (storedPrefs) setPreferences(JSON.parse(storedPrefs));

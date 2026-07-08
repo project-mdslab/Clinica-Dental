@@ -16,6 +16,15 @@ export const metadata: Metadata = {
   title: "Bina Odontología Integral",
   description: "Sistema de gestión dental integral",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Bina Odonto",
+  },
+};
+
+export const viewport = {
+  themeColor: "#8C7156",
 };
 
 import { NotificationProvider } from "@/contexts/NotificationContext";
