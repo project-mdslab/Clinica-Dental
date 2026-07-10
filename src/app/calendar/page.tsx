@@ -599,8 +599,6 @@ export default function CalendarPage() {
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, 'day', hour)}
                   onClick={() => {
-                    setNewAppointmentDate(currentDate);
-                    setNewAppointmentTime(`${hour}:00`);
                     setIsNewAppointmentModalOpen(true);
                   }}
                 >
