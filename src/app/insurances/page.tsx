@@ -14,7 +14,7 @@ export default async function InsurancesPage() {
   const { data: insurances } = await supabase.from('health_insurances').select('*').order('name');
 
   return (
-    <div className="p-lg md:p-xl max-w-7xl mx-auto space-y-lg animate-in fade-in duration-500">
+    <div className="p-lg md:p-xl max-w-7xl mx-auto space-y-lg animate-in fade-in duration-150">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="font-display-sm text-display-sm text-on-surface mb-2">Obras Sociales</h1>

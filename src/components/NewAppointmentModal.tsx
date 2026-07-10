@@ -26,7 +26,8 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
   const [newPatient, setNewPatient] = useState({ first_name: '', last_name: '', phone: '' });
   
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [startHour, setStartHour] = useState('9');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('10:00');
   const [serviceType, setServiceType] = useState('');
   const [professionalId, setProfessionalId] = useState('');
   const [professionals, setProfessionals] = useState<any[]>([]);
@@ -102,8 +103,8 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
           patient_id: finalPatientId,
           professional_id: professionalId, // Actually professional_id is a UUID in schema, but we'll try to insert the string '1'. Supabase might fail if type is strictly UUID.
           date: date,
-          start_time: `${startHour.padStart(2, '0')}:00:00`,
-          end_time: `${(parseInt(startHour) + 1).toString().padStart(2, '0')}:00:00`,
+          start_time: `${startTime}:00`,
+          end_time: `${endTime}:00`,
           service_type: serviceType,
           status: 'Scheduled'
         });
@@ -120,8 +121,8 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
             professional_id: finalProfId,
             patient_id: finalPatientId,
             date: date,
-            start_time: `${startHour.padStart(2, '0')}:00:00`,
-            end_time: `${(parseInt(startHour) + 1).toString().padStart(2, '0')}:00:00`,
+            start_time: `${startTime}:00`,
+            end_time: `${endTime}:00`,
             service_type: serviceType,
             status: 'Scheduled'
           });
@@ -267,15 +268,23 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
               </div>
               <div>
                 <label className="block text-sm font-semibold text-on-surface-variant mb-1">Hora Inicio</label>
-                <select 
-                  value={startHour}
-                  onChange={(e) => setStartHour(e.target.value)}
+                <input 
+                  type="time"
+                  required
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
                   className="w-full bg-surface border border-outline-variant rounded-xl py-2 px-3 text-sm text-on-surface focus:border-primary outline-none transition-all"
-                >
-                  {Array.from({ length: 16 }, (_, i) => i + 6).map(h => (
-                    <option key={h} value={h}>{h}:00</option>
-                  ))}
-                </select>
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-on-surface-variant mb-1">Hora Fin</label>
+                <input 
+                  type="time"
+                  required
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full bg-surface border border-outline-variant rounded-xl py-2 px-3 text-sm text-on-surface focus:border-primary outline-none transition-all"
+                />
               </div>
             </div>
 

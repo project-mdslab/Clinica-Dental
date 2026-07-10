@@ -62,11 +62,7 @@ export default function LoginPage() {
         {/* Lado Derecho (Formulario) */}
         <div className="w-full md:w-[55%] p-lg md:p-[64px] flex flex-col justify-center relative">
           
-          {/* Volver a la web */}
-          <Link href="#" className="absolute top-8 left-8 md:top-12 md:left-12 flex items-center gap-2 text-on-surface-variant font-label-md text-sm hover:text-primary transition-colors">
-            <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-            Volver a la web
-          </Link>
+          
 
           <div className="mt-8 md:mt-0 flex flex-col justify-center h-full">
             <div className="mb-8 flex justify-center md:justify-start">

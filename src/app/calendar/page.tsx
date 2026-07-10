@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, addMonths, subMonths, startOfWeek, addDays, isSameMonth, isSameDay, startOfMonth, endOfMonth, endOfWeek, isToday, parseISO, getDay, getHours } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { createClient } from '@/utils/supabase/client';
@@ -11,6 +11,7 @@ import Portal from '@/components/Portal';
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentTime] = useState(new Date());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   const [userRole, setUserRole] = useState<'secretary' | 'professional'>('secretary');
   const [currentUserId, setCurrentUserId] = useState('');
@@ -29,6 +30,14 @@ export default function CalendarPage() {
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [toast, setToast] = useState<{message: string, visible: boolean, type: 'success' | 'error'}>({message: '', visible: false, type: 'success'});
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, visible: true, type });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+    }, 4000);
+  };
 
   // Prestaciones dinámicas
   const [services, setServices] = useState<{name: string, color: string}[]>([]);
@@ -37,6 +46,58 @@ export default function CalendarPage() {
 
   // Horarios No Hábiles
   const [unavailabilities, setUnavailabilities] = useState<{professional_id: string, dayOfWeek: number, startHour: number, endHour: number}[]>([]);
+
+  const handleAttendance = async (status: 'asistio' | 'ausente') => {
+    try {
+      if (!selectedAppointment) {
+        console.error('No selected appointment');
+        return;
+      }
+      
+      console.log('Marking attendance:', status, selectedAppointment.id);
+      
+      // 1. Update the appointment status
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status })
+        .eq('id', selectedAppointment.id);
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        showAlert('Error al actualizar el estado: ' + error.message);
+        return;
+      }
+
+      // 2. Insert a clinical note for the attendance record
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+         console.error('Auth error:', authError);
+      }
+      
+      if (user) {
+        const attendanceText = status === 'asistio' ? 'Paciente asistió al turno programado.' : 'Paciente AUSENTE al turno programado.';
+        const { error: insertError } = await supabase.from('clinical_notes').insert([{
+          patient_id: selectedAppointment.patient_id,
+          user_id: user.id,
+          description: attendanceText,
+          date: selectedAppointment.date
+        }]);
+        if (insertError) {
+           console.error('Insert note error:', insertError);
+        }
+      } else {
+         console.warn('No user found, skipping clinical note insertion');
+      }
+
+      // 3. Close modal and refresh data
+      setSelectedAppointment(null);
+      await fetchCalendarData();
+      showToast(`El turno fue marcado como ${status === 'asistio' ? 'Asistió' : 'Ausente'}.`, 'success');
+    } catch (e: any) {
+      console.error('Unexpected error in handleAttendance:', e);
+      showToast('Error inesperado: ' + e.message, 'error');
+    }
+  };
 
   // Calcular próximo paciente (considerando el rol)
   const currentHourNum = currentTime.getHours();
@@ -74,6 +135,14 @@ export default function CalendarPage() {
         const appointmentDate = parseISO(app.date);
         const assignedProf = realProfessionals.find((p: any) => p.id === app.professional_id) || { name: 'Profesional Desconocido', id: app.professional_id };
 
+        const startParts = app.start_time.split(':');
+        const endParts = app.end_time.split(':');
+        const startHour = parseInt(startParts[0]);
+        const startMinute = parseInt(startParts[1] || '0');
+        const endHour = parseInt(endParts[0]);
+        const endMinute = parseInt(endParts[1] || '0');
+        const durationMinutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+
         return {
           id: app.id,
           title: app.service_type,
@@ -82,11 +151,14 @@ export default function CalendarPage() {
           patient: app.patients ? `${app.patients.first_name} ${app.patients.last_name}` : 'Paciente Eliminado',
           patient_id: app.patient_id,
           type: app.service_type,
-          startHour: parseInt(app.start_time.split(':')[0]), // "09:00" -> 9
-          duration: parseInt(app.end_time.split(':')[0]) - parseInt(app.start_time.split(':')[0]),
+          startHour: startHour,
+          startMinute: startMinute,
+          durationMinutes: durationMinutes,
+          start_time: app.start_time,
+          end_time: app.end_time,
           dayIdx: getDay(appointmentDate), // 0 Sunday, 1 Monday, etc.
           date: app.date,
-          status: 'Registrado'
+          status: app.status || 'Registrado'
         };
       });
       setEvents(formattedEvents);
@@ -134,6 +206,30 @@ export default function CalendarPage() {
     }
   }, []);
 
+  // Auto-scroll to first appointment
+  useEffect(() => {
+    if (view === 'day' || view === 'week') {
+      const displayEvents = events;
+      const visibleEvents = view === 'day' 
+        ? displayEvents.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'))
+        : displayEvents.filter(ev => {
+            const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+            const evDate = parseISO(ev.date);
+            return evDate >= weekStart && evDate <= weekEnd;
+          });
+
+      if (visibleEvents.length > 0 && scrollContainerRef.current) {
+        const earliestHour = Math.min(...visibleEvents.map(e => e.startHour));
+        if (earliestHour >= 6) {
+          const pixelsToScroll = (earliestHour - 6) * 80;
+          // Smooth scroll looks better but jumping is sometimes preferred. Let's jump.
+          scrollContainerRef.current.scrollTo({ top: Math.max(0, pixelsToScroll - 40), behavior: 'smooth' });
+        }
+      }
+    }
+  }, [view, currentDate, events, userRole, currentUserId]);
+
   const handleAddService = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newServiceName.trim()) return;
@@ -168,13 +264,16 @@ export default function CalendarPage() {
     let updatedEvent = { ...draggedEvent, startHour: targetHour };
     let newDateString = draggedEvent.date;
     
-    if (view === 'week' || typeof target === 'number') {
+    if (view === 'week' && typeof target === 'number') {
       const targetDayIdx = target as number;
       updatedEvent.dayIdx = targetDayIdx;
-      const currentWeekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Date-fns maneja 0 como Domingo
+      const currentWeekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); 
       const newDate = addDays(currentWeekStart, targetDayIdx);
       newDateString = format(newDate, 'yyyy-MM-dd');
-    } else if (view === 'day' || typeof target === 'string') {
+    } else if (view === 'day' && target === 'day') {
+      // En vista de día normal, solo cambia la hora, no el día ni el profesional
+      newDateString = format(currentDate, 'yyyy-MM-dd');
+    } else if (typeof target === 'string' && target !== 'day') {
       const profId = target as string;
       const assignedProf = professionals.find(p => p.id === profId);
       if (assignedProf) {
@@ -319,7 +418,7 @@ export default function CalendarPage() {
     return (
       <div className="flex flex-col md:h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm md:overflow-hidden overflow-visible">
         {/* Contenedor scrolleable principal */}
-        <div className="flex-1 md:overflow-y-auto relative">
+        <div className="flex-1 md:overflow-y-auto relative scroll-smooth" ref={scrollContainerRef}>
           
           {/* Cabecera de días - STICKY */}
           <div className="sticky top-[80px] md:top-0 z-30 grid grid-cols-8 border-b border-outline-variant bg-surface-container-lowest shadow-sm">
@@ -377,10 +476,14 @@ export default function CalendarPage() {
                 }
 
                 {/* Eventos */}
-                {events.filter(ev => ev.dayIdx === dayIdx).map(ev => {
-                  const top = (ev.startHour - 6) * 80;
-                  const height = ev.duration * 80;
+                {events.filter(ev => ev.date === format(day, 'yyyy-MM-dd')).map(ev => {
+                  const top = (ev.startHour - 6 + (ev.startMinute || 0) / 60) * 80;
+                  const height = (ev.durationMinutes / 60) * 80;
                   const colors = getEventColor(ev);
+                  const endH = Math.floor(ev.startHour + (ev.startMinute + ev.durationMinutes) / 60);
+                  const endM = (ev.startMinute + ev.durationMinutes) % 60;
+                  const timeString = `${ev.startHour.toString().padStart(2, '0')}:${ev.startMinute.toString().padStart(2, '0')} - ${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                  
                   return (
                     <div 
                       key={ev.id}
@@ -388,7 +491,7 @@ export default function CalendarPage() {
                       onDragStart={(e) => handleDragStart(e, ev)}
                       onDragEnd={handleDragEnd}
                       onClick={() => setSelectedAppointment(ev)}
-                      className={`absolute left-1 right-1 ${colors.lightBg} border ${colors.border} rounded-xl p-2 cursor-pointer hover:brightness-95 transition-colors shadow-sm z-10 flex flex-col overflow-hidden group`}
+                      className={`absolute left-1 right-1 ${colors.lightBg} border ${colors.border} rounded-xl p-2 cursor-pointer hover:brightness-95 transition-colors shadow-sm z-10 flex flex-col overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
                       {ev.title && ev.title.trim() !== '' && (
@@ -397,8 +500,21 @@ export default function CalendarPage() {
                           {ev.title}
                         </div>
                       )}
-                      <p className={`text-xs font-bold ${colors.text} relative z-0`}>{ev.startHour}:00 - {ev.startHour + ev.duration}:00</p>
-                      <p className="text-xs text-on-surface-variant mt-auto font-medium truncate relative z-0">{ev.professional}</p>
+                      <p className={`text-[10px] font-bold ${colors.text} relative z-0`}>{timeString}</p>
+                      <p className={`text-xs font-bold leading-tight mt-0.5 ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>{ev.patient}</p>
+                      <p className="text-[10px] text-on-surface-variant mt-auto font-medium truncate relative z-0">{ev.professional}</p>
+                      
+                      {/* Attendance Indicator (Bottom Right) */}
+                      {ev.status === 'asistio' && (
+                         <div className="absolute bottom-1 right-1 flex items-center justify-center text-[#10B981] z-10 drop-shadow-sm pointer-events-none">
+                           <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                         </div>
+                      )}
+                      {ev.status === 'ausente' && (
+                         <div className="absolute bottom-1 right-1 flex items-center justify-center text-error z-10 drop-shadow-sm pointer-events-none">
+                           <span className="material-symbols-outlined text-[16px]">cancel</span>
+                         </div>
+                      )}
                     </div>
                   );
                 })}
@@ -414,12 +530,7 @@ export default function CalendarPage() {
   const renderDayView = () => {
     const hours = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM a 9 PM (21)
     
-    // Filtrar eventos según rol
-    const displayEvents = userRole === 'secretary' 
-      ? events 
-      : events.filter(ev => ev.professional_id === currentUserId);
-
-    const dayEvents = displayEvents.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'));
+    const dayEvents = events.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'));
 
     const weekStartDay = startOfWeek(currentDate, { weekStartsOn: 1 });
     const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStartDay, i));
@@ -428,7 +539,7 @@ export default function CalendarPage() {
       <div className="flex flex-col md:h-full w-full bg-surface-container-lowest rounded-3xl border border-outline-variant shadow-sm md:overflow-hidden overflow-visible">
         
         {/* Contenedor scrolleable principal */}
-        <div className="flex-1 md:overflow-y-auto relative">
+        <div className="flex-1 md:overflow-y-auto relative scroll-smooth" ref={scrollContainerRef}>
           
           {/* Cabecera del día (Semana Horizontal) - STICKY */}
           <div className="sticky top-[80px] md:top-0 z-30 border-b border-outline-variant bg-surface-container-lowest shadow-sm pt-2 pb-3">
@@ -486,7 +597,12 @@ export default function CalendarPage() {
                   key={`day-${hour}`} 
                   className="h-20 border-b border-outline-variant/30 hover:bg-surface-container-low/50 transition-colors cursor-pointer w-full"
                   onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, 1, hour)}
+                  onDrop={(e) => handleDrop(e, 'day', hour)}
+                  onClick={() => {
+                    setNewAppointmentDate(currentDate);
+                    setNewAppointmentTime(`${hour}:00`);
+                    setIsNewAppointmentModalOpen(true);
+                  }}
                 >
                 </div>
               ))}
@@ -510,9 +626,12 @@ export default function CalendarPage() {
 
               {/* Eventos del día actual */}
               {dayEvents.map(ev => {
-                const top = (ev.startHour - 6) * 80;
-                const height = ev.duration * 80;
+                const top = (ev.startHour - 6 + (ev.startMinute || 0) / 60) * 80;
+                const height = (ev.durationMinutes / 60) * 80;
                 const colors = getEventColor(ev);
+                const endH = Math.floor(ev.startHour + (ev.startMinute + ev.durationMinutes) / 60);
+                const endM = (ev.startMinute + ev.durationMinutes) % 60;
+                const timeString = `${ev.startHour.toString().padStart(2, '0')}:${ev.startMinute.toString().padStart(2, '0')} - ${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
                 // Adjust border logic for left-only thick border
                 const leftBorderColor = colors.border.replace('border-', 'border-l-'); // e.g. border-pink-300 -> border-l-pink-300 (wait, tailwind might not support this dynamically if not pre-compiled, let's use style for the left border color or just rely on existing standard colors).
                 // It's safer to just set border-l-[4px] and the border color class.
@@ -523,7 +642,8 @@ export default function CalendarPage() {
                     draggable
                     onDragStart={(e) => handleDragStart(e, ev)}
                     onDragEnd={handleDragEnd}
-                    className={`absolute left-2 right-4 ${colors.lightBg} border-y border-r border-l-4 ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group`}
+                    onClick={() => setSelectedAppointment(ev)}
+                    className={`absolute left-2 right-4 ${colors.lightBg} border-y border-r border-l-4 ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
                     {/* Etiqueta de la prestación simulando el Status pill */}
@@ -542,9 +662,11 @@ export default function CalendarPage() {
                           </span>
                         </div>
                         <div className="pt-0.5">
-                          <span className="text-sm font-bold text-on-surface block leading-tight truncate max-w-[150px]">{ev.patient}</span>
-                          <span className={`text-[10px] font-bold ${colors.text} opacity-80`}>
-                            {ev.startHour}:00 - {ev.startHour + ev.duration}:00
+                          <span className={`text-sm font-bold block leading-tight truncate max-w-[150px] ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                            {ev.patient}
+                          </span>
+                          <span className={`text-[10px] font-bold ${colors.text} opacity-80 flex items-center gap-1`}>
+                            {timeString}
                           </span>
                         </div>
                       </div>
@@ -554,7 +676,7 @@ export default function CalendarPage() {
                        <span className="bg-white/60 text-[10px] font-bold px-2 py-0.5 rounded text-on-surface-variant truncate max-w-[120px] shadow-sm">
                          {ev.professional}
                        </span>
-                       <div className="flex gap-1.5 relative z-20">
+                       <div className="flex gap-1.5 relative z-20 mr-8">
                          <Link href={`/patients/${ev.patient_id}`} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Ver Paciente">
                             <span className="material-symbols-outlined text-[14px]">person</span>
                          </Link>
@@ -563,6 +685,18 @@ export default function CalendarPage() {
                          </button>
                        </div>
                     </div>
+                    
+                    {/* Attendance Indicator (Bottom Right) */}
+                    {ev.status === 'asistio' && (
+                       <div className="absolute bottom-2 right-3 flex items-center justify-center text-[#10B981] z-10 md:group-hover:opacity-0 transition-opacity pointer-events-none drop-shadow-sm">
+                         <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                       </div>
+                    )}
+                    {ev.status === 'ausente' && (
+                       <div className="absolute bottom-2 right-3 flex items-center justify-center text-error z-10 md:group-hover:opacity-0 transition-opacity pointer-events-none drop-shadow-sm">
+                         <span className="material-symbols-outlined text-[20px]">cancel</span>
+                       </div>
+                    )}
                   </div>
                 );
               })}
@@ -616,9 +750,12 @@ export default function CalendarPage() {
             <div className="flex-1 flex flex-col gap-1 overflow-y-auto">
               {dayEvents.map(ev => {
                 const colors = getEventColor(ev);
+                const timeString = `${ev.startHour.toString().padStart(2, '0')}:${(ev.startMinute || 0).toString().padStart(2, '0')}`;
                 return (
-                  <div key={ev.id} className={`w-full ${colors.bg} text-white text-[10px] font-bold px-1.5 py-0.5 rounded truncate shadow-sm`}>
-                    {ev.startHour}:00 {ev.title}
+                  <div key={ev.id} className={`w-full ${colors.bg} text-white text-[10px] font-bold px-1.5 py-0.5 rounded truncate shadow-sm ${ev.status === 'ausente' ? 'opacity-60 line-through' : ''}`} title={`${timeString} - ${ev.patient} (${ev.professional})`}>
+                    {ev.status === 'asistio' && <span className="material-symbols-outlined text-[10px] mr-1 align-middle">check_circle</span>}
+                    {ev.status === 'ausente' && <span className="material-symbols-outlined text-[10px] mr-1 align-middle">cancel</span>}
+                    {timeString} {ev.patient}
                   </div>
                 );
               })}
@@ -812,7 +949,7 @@ export default function CalendarPage() {
 
   return (
     <>
-      <div className="min-h-[calc(100vh-160px)] md:h-screen w-full flex flex-col md:flex-row bg-surface overflow-visible md:overflow-hidden animate-in fade-in duration-500">
+      <div className="min-h-[calc(100vh-160px)] md:h-screen w-full flex flex-col md:flex-row bg-surface overflow-visible md:overflow-hidden animate-in fade-in duration-150">
       
       {/* Sidebar Izquierdo de la Agenda */}
       <div className="hidden md:flex w-72 bg-surface-container-lowest border-r border-outline-variant flex-col p-4 gap-6 overflow-y-auto">
@@ -957,7 +1094,7 @@ export default function CalendarPage() {
             <div className="space-y-4 bg-surface-container-lowest border border-outline-variant/50 rounded-2xl p-4 mb-6">
               <div className="flex items-center gap-3 text-on-surface-variant">
                 <span className="material-symbols-outlined text-[20px]">schedule</span>
-                <span className="font-medium text-sm">{format(currentDate, 'dd/MM/yyyy')} • {selectedAppointment.startHour}:00 - {selectedAppointment.startHour + selectedAppointment.duration}:00</span>
+                <span className="font-medium text-sm">{format(currentDate, 'dd/MM/yyyy')} • {selectedAppointment.start_time?.slice(0, 5) || "00:00"} - {selectedAppointment.end_time?.slice(0, 5) || "00:00"}</span>
               </div>
               <div className="flex items-center gap-3 text-on-surface-variant">
                 <span className="material-symbols-outlined text-[20px]">person</span>
@@ -970,10 +1107,10 @@ export default function CalendarPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-6">
-              <button className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-[#34D399]/20 text-[#10B981] hover:bg-[#34D399]/30 transition-colors border border-[#34D399]/30 flex items-center justify-center gap-2">
+              <button type="button" onClick={() => handleAttendance('asistio')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-[#34D399]/20 text-[#10B981] hover:bg-[#34D399]/30 transition-colors border border-[#34D399]/30 flex items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">check_circle</span> Asistió
               </button>
-              <button className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-error/10 text-error hover:bg-error/20 transition-colors border border-error/20 flex items-center justify-center gap-2">
+              <button type="button" onClick={() => handleAttendance('ausente')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-error/10 text-error hover:bg-error/20 transition-colors border border-error/20 flex items-center justify-center gap-2">
                 <span className="material-symbols-outlined text-[18px]">cancel</span> Ausente
               </button>
             </div>
@@ -1034,6 +1171,7 @@ export default function CalendarPage() {
         onSuccess={() => {
           setIsNewAppointmentModalOpen(false);
           fetchCalendarData();
+          showToast('Turno agendado exitosamente.', 'success');
         }}
       />
 
@@ -1046,6 +1184,20 @@ export default function CalendarPage() {
         onCancel={() => setAlertDialog(prev => ({ ...prev, isOpen: false }))}
         confirmText={alertDialog.confirmText}
       />
+      
+      {/* Toast Notification */}
+      {toast.visible && (
+        <Portal>
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-xl border ${toast.type === 'success' ? 'bg-[#10B981]/10 border-[#10B981]/20 text-emerald-900' : 'bg-error/10 border-error/20 text-error-900'} backdrop-blur-md`}>
+              <span className={`material-symbols-outlined ${toast.type === 'success' ? 'text-[#10B981]' : 'text-error'}`}>
+                {toast.type === 'success' ? 'check_circle' : 'error'}
+              </span>
+              <span className="font-bold text-sm">{toast.message}</span>
+            </div>
+          </div>
+        </Portal>
+      )}
     </>
   );
 }

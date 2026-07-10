@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, addDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from '@/utils/supabase/client';
@@ -10,6 +10,7 @@ import { createClient } from '@/utils/supabase/client';
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const [greeting, setGreeting] = useState("Buenos días");
   const [userName, setUserName] = useState("");
@@ -37,6 +38,21 @@ export default function DashboardPage() {
     fetchData();
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (appointments.length > 0 && scrollContainerRef.current) {
+      // Find the earliest start time
+      let earliestHour = 24;
+      appointments.forEach(apt => {
+        const hour = parseInt((apt.start_time || "09:00").split(':')[0]);
+        if (hour < earliestHour) earliestHour = hour;
+      });
+      if (earliestHour >= 6) {
+        const pixelsToScroll = (earliestHour - 6) * 80;
+        scrollContainerRef.current.scrollTo({ top: Math.max(0, pixelsToScroll - 40), behavior: 'smooth' });
+      }
+    }
+  }, [appointments]);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -63,25 +79,23 @@ export default function DashboardPage() {
       setTotalPacientes(count || 0);
 
       // 3. Turnos (para la fecha seleccionada)
-      const start = startOfDay(selectedDate).toISOString();
-      const end = endOfDay(selectedDate).toISOString();
-      const { data: appts } = await supabase
+      const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+      const { data: allAppts } = await supabase
         .from('appointments')
-        .select('*, patient:patients(id, first_name, last_name, document_id)')
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: true });
+        .select('*, patient:patients(id, first_name, last_name, document_id, health_insurances(name))');
         
-      setAppointments(appts || []);
+      const appts = (allAppts || []).filter(a => a.date === formattedDate);
+      appts.sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
+        
+      setAppointments(appts);
 
       // Contar turnos específicos de HOY para el KPI
       if (startOfDay(today).getTime() === startOfDay(selectedDate).getTime()) {
-        setTurnosHoy(appts?.length || 0);
+        setTurnosHoy(appts.length);
       } else {
-        const startT = startOfDay(today).toISOString();
-        const endT = endOfDay(today).toISOString();
-        const { count: countToday } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).gte('date', startT).lte('date', endT);
-        setTurnosHoy(countToday || 0);
+        const formattedToday = format(today, 'yyyy-MM-dd');
+        const countToday = (allAppts || []).filter(a => a.date === formattedToday).length;
+        setTurnosHoy(countToday);
       }
 
       // 4. Deudas (Pagos Pendientes)
@@ -120,6 +134,15 @@ export default function DashboardPage() {
     setIsLoading(false);
   };
 
+  const isSelectedToday = format(selectedDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+  let titleText = format(selectedDate, "EEEE d 'de' MMMM", { locale: es });
+  if (isSelectedToday) {
+    titleText = `Hoy, ${titleText}`;
+  } else {
+    titleText = `${titleText} de ${format(selectedDate, 'yyyy')}`;
+  }
+  const capitalizedTitle = titleText.charAt(0).toUpperCase() + titleText.slice(1);
+
   return (
     <div className="px-margin-mobile md:px-margin-desktop pb-xl pt-lg">
       
@@ -133,37 +156,37 @@ export default function DashboardPage() {
       </section>
 
       {/* KPI Stats */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-md mb-xl">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-md mb-xl">
         {/* Card 1: Pacientes Totales */}
-        <Link href="/patients" className="bg-bina-crema p-md rounded-2xl border border-bina-taupe/10 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
-          <div className="flex justify-between items-start mb-2">
+        <Link href="/patients" className="bg-bina-crema p-4 md:p-md rounded-2xl border border-bina-taupe/10 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
+          <div className="flex justify-between items-start mb-1 md:mb-2">
             <span className="font-label-md text-bina-taupe uppercase tracking-wider font-semibold opacity-80 group-hover:opacity-100 transition-opacity">Pacientes Totales</span>
             <span className="material-symbols-outlined text-bina-taupe opacity-70 group-hover:scale-110 transition-transform">group</span>
           </div>
           <div className="flex items-end gap-2">
-            <h2 className="text-4xl md:text-3xl lg:text-4xl font-bold text-bina-taupe">{totalPacientes}</h2>
+            <h2 className="text-3xl lg:text-4xl font-bold text-bina-taupe">{totalPacientes}</h2>
           </div>
         </Link>
 
         {/* Card 2: Turnos Hoy */}
-        <Link href="/calendar" className="bg-bina-taupe/10 p-md rounded-2xl border border-bina-taupe/10 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
-          <div className="flex justify-between items-start mb-2">
+        <Link href="/calendar" className="bg-bina-taupe/10 p-4 md:p-md rounded-2xl border border-bina-taupe/10 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
+          <div className="flex justify-between items-start mb-1 md:mb-2">
             <span className="font-label-md text-bina-taupe uppercase tracking-wider font-semibold opacity-80 group-hover:opacity-100 transition-opacity">Turnos Hoy</span>
             <span className="material-symbols-outlined text-bina-taupe opacity-70 group-hover:scale-110 transition-transform">event</span>
           </div>
           <div className="flex items-end gap-2">
-            <h2 className="text-4xl md:text-3xl lg:text-4xl font-bold text-bina-taupe">{turnosHoy}</h2>
+            <h2 className="text-3xl lg:text-4xl font-bold text-bina-taupe">{turnosHoy}</h2>
           </div>
         </Link>
 
         {/* Card 3: Pagos Pendientes */}
-        <Link href="/finance" className="bg-bina-madera/15 p-md rounded-2xl border border-bina-madera/20 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
-          <div className="flex justify-between items-start mb-2">
+        <Link href="/finance" className="bg-bina-madera/15 p-4 md:p-md rounded-2xl border border-bina-madera/20 shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-in-out cursor-pointer flex flex-col justify-between group">
+          <div className="flex justify-between items-start mb-1 md:mb-2">
             <span className="font-label-md text-bina-taupe uppercase tracking-wider font-semibold opacity-80 group-hover:opacity-100 transition-opacity">Pacientes con Deuda</span>
             <span className="material-symbols-outlined text-bina-taupe opacity-70 group-hover:scale-110 transition-transform">payments</span>
           </div>
           <div className="flex items-end gap-2">
-            <h2 className="text-4xl md:text-3xl lg:text-4xl font-bold text-bina-taupe">{pacientesConDeuda}</h2>
+            <h2 className="text-3xl lg:text-4xl font-bold text-bina-taupe">{pacientesConDeuda}</h2>
           </div>
         </Link>
       </section>
@@ -172,84 +195,106 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-gutter">
         
         {/* Agenda */}
-        <section className="xl:col-span-2">
-          <div className="bg-surface-container-lowest rounded-2xl border border-tertiary-fixed shadow-[0px_4px_20px_rgba(0,0,0,0.03)] p-lg overflow-hidden flex flex-col h-auto min-h-[400px] lg:h-[500px]">
-            
-            {/* Header Agenda */}
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-headline-md font-bold text-on-surface">Agenda Clínica</h3>
-              <div className="px-4 py-2 border border-outline-variant rounded-lg font-label-md flex items-center gap-2 cursor-pointer hover:bg-surface-container transition-colors">
-                {format(selectedDate, "MMMM yyyy", { locale: es })}
+        <section className="xl:col-span-2 flex flex-col gap-6">
+          <Link href="/calendar">
+            <div className="bg-primary-container/40 rounded-2xl border border-primary/20 shadow-sm p-lg flex flex-col md:flex-row items-center justify-between cursor-pointer hover:bg-primary-container/60 transition-colors group">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                  <span className="material-symbols-outlined text-3xl">calendar_today</span>
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-on-surface">{capitalizedTitle}</h3>
+                  <p className="text-on-surface-variant text-lg">En agenda: <span className="font-bold text-primary">{turnosHoy} turnos</span></p>
+                </div>
+              </div>
+              <div className="mt-4 md:mt-0 px-6 py-3 bg-primary text-white rounded-xl font-bold shadow-md flex items-center gap-2 hover:shadow-lg transition-shadow">
+                Ver agenda completa
+                <span className="material-symbols-outlined text-xl">arrow_forward</span>
               </div>
             </div>
+          </Link>
 
-            {/* Date Selector (Horizontal) */}
-            <div className="flex items-center justify-between mb-6 pb-6 border-b border-outline-variant/30 px-2">
-              <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
+          <div className="bg-surface-container-lowest rounded-2xl border border-tertiary-fixed shadow-[0px_4px_20px_rgba(0,0,0,0.03)] overflow-hidden flex flex-col h-auto min-h-[400px]">
+            {/* Header Agenda Table */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-outline-variant/30 gap-4">
+              <h3 className="font-headline-md font-bold text-on-surface">Turnos del Día</h3>
               
-              <div className="flex gap-2 md:gap-4 overflow-x-auto no-scrollbar">
-                {weekDays.map((d, i) => {
-                  const isSelected = format(d, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                  return (
-                    <button 
-                      key={i}
-                      onClick={() => setSelectedDate(d)}
-                      className={`flex flex-col items-center justify-center w-12 h-14 md:w-14 md:h-16 rounded-2xl transition-all ${
-                        isSelected ? 'bg-on-surface text-surface shadow-md scale-105' : 'text-on-surface-variant hover:bg-surface-container-high'
-                      }`}
-                    >
-                      <span className="text-xs uppercase font-medium">{format(d, 'eee', { locale: es })}</span>
-                      <span className="text-lg font-bold">{format(d, 'dd')}</span>
-                    </button>
-                  );
-                })}
+              {/* Date Selector (Horizontal) */}
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
+                <div className="px-4 py-2 border border-outline-variant rounded-lg font-label-md flex items-center gap-2 text-primary font-bold">
+                  {format(selectedDate, "dd MMMM yyyy", { locale: es })}
+                </div>
+                <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
               </div>
-
-              <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-container rounded-full transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
             </div>
 
-            {/* Appointment List */}
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+            {/* Table View */}
+            <div className="flex-1 overflow-x-auto relative">
               {isLoading ? (
-                <div className="p-8 text-center text-on-surface-variant">Cargando agenda...</div>
-              ) : appointments.length === 0 ? (
-                <div className="p-8 text-center text-on-surface-variant flex flex-col items-center">
-                  <span className="material-symbols-outlined text-4xl mb-2 opacity-50">event_available</span>
-                  No hay turnos para esta fecha.
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="p-8 text-center text-on-surface-variant">Cargando agenda...</div>
                 </div>
-              ) : appointments.map((apt) => (
-                <div 
-                  key={apt.id} 
-                  onClick={() => router.push(`/patients/${apt.patient?.id}`)}
-                  className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 border border-outline-variant/40 rounded-xl hover:border-primary-container hover:shadow-sm transition-all group cursor-pointer bg-surface/30"
-                >
-                  {/* Paciente y Doc */}
-                  <div className="flex-1 flex flex-col md:flex-row md:items-center gap-2 md:gap-8">
-                    <div className="flex flex-col min-w-[150px]">
-                      <span className="font-bold text-on-surface text-base group-hover:text-primary transition-colors">
-                        {apt.patient?.first_name} {apt.patient?.last_name}
-                      </span>
-                      <span className="text-xs text-on-surface-variant uppercase tracking-wider">Paciente</span>
-                    </div>
-                    
-                    <div className="flex flex-col flex-1">
-                      <div className="flex items-center gap-1.5 text-on-surface font-medium text-sm">
-                        <span className="material-symbols-outlined text-[16px] text-primary">schedule</span>
-                        {(apt.start_time || "").slice(0, 5)} - {(apt.end_time || "").slice(0, 5)}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-on-surface-variant text-sm mt-0.5">
-                        <span className="material-symbols-outlined text-[16px]">notes</span>
-                        {apt.notes || "Sin notas adicionales"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Acciones */}
-                  <div className="flex items-center justify-between sm:justify-end gap-4 sm:w-auto w-full border-t sm:border-t-0 border-outline-variant/30 pt-3 sm:pt-0">
-                    <span className="material-symbols-outlined text-on-surface-variant opacity-50 group-hover:opacity-100 transition-opacity">arrow_forward_ios</span>
-                  </div>
-                </div>
-              ))}
+              ) : (
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-surface-container/30 border-b border-outline-variant/30 text-on-surface-variant font-medium text-sm">
+                      <th className="p-4 pl-6 font-semibold w-24">Horario</th>
+                      <th className="p-4 font-semibold">Paciente</th>
+                      <th className="p-4 font-semibold">Obra Social</th>
+                      <th className="p-4 pr-6 font-semibold">Práctica</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appointments.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-12 text-center text-on-surface-variant">
+                          <div className="flex flex-col items-center gap-2 opacity-60">
+                            <span className="material-symbols-outlined text-4xl">event_busy</span>
+                            <p>No hay turnos registrados para esta fecha.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      appointments.map((apt) => (
+                        <tr key={apt.id} onClick={() => router.push(`/patients/${apt.patient?.id}`)} className={`border-b border-outline-variant/20 hover:bg-surface-container-lowest/50 transition-colors cursor-pointer group ${apt.status === 'ausente' ? 'opacity-50' : ''}`}>
+                          <td className="p-4 pl-6 font-bold text-on-surface group-hover:text-primary transition-colors">
+                            {apt.start_time ? apt.start_time.slice(0, 5) : "--:--"}
+                          </td>
+                          <td className={`p-4 text-on-surface font-semibold flex items-center gap-2 ${apt.status === 'ausente' ? 'line-through text-on-surface-variant' : ''}`}>
+                            {apt.status === 'asistio' ? (
+                               <div className="w-8 h-8 rounded-full bg-[#10B981]/10 flex items-center justify-center text-[#10B981] text-xs">
+                                 <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                               </div>
+                            ) : apt.status === 'ausente' ? (
+                               <div className="w-8 h-8 rounded-full bg-error/10 flex items-center justify-center text-error text-xs">
+                                 <span className="material-symbols-outlined text-[16px]">cancel</span>
+                               </div>
+                            ) : (
+                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs">
+                                 <span className="material-symbols-outlined text-[16px]">person</span>
+                               </div>
+                            )}
+                            {apt.patient?.first_name} {apt.patient?.last_name}
+                          </td>
+                          <td className="p-4 text-on-surface-variant text-sm">
+                            {apt.patient?.health_insurances?.name || "Particular"}
+                          </td>
+                          <td className="p-4 pr-6">
+                            {apt.service_type && apt.service_type.trim() !== '' ? (
+                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap">
+                                 {apt.service_type}
+                               </span>
+                            ) : (
+                              <span className="text-on-surface-variant/40 text-sm italic">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </section>

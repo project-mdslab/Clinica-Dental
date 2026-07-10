@@ -503,17 +503,21 @@ export default function PatientHistory({ patient, onOpenTicket }: { patient: any
           </div>
         ) : (
           <div className="relative border-l-2 border-primary/20 ml-4 md:ml-6 space-y-8 pb-8">
-            {notes.map((note) => (
+            {notes.map((note) => {
+              const isAbsence = note.description?.includes('AUSENTE al turno programado');
+              const isAttendance = note.description?.includes('asistió al turno programado');
+              
+              return (
               <div key={note.id} className="relative pl-8 md:pl-10">
                 {/* Timeline Dot */}
-                <div className="absolute -left-[11px] top-1 w-5 h-5 bg-primary rounded-full ring-4 ring-surface-container-lowest shadow-sm flex items-center justify-center">
-                  <div className="w-2 h-2 bg-on-primary rounded-full"></div>
+                <div className={`absolute -left-[11px] top-1 w-5 h-5 rounded-full ring-4 ring-surface-container-lowest shadow-sm flex items-center justify-center ${isAbsence ? 'bg-error' : isAttendance ? 'bg-[#10B981]' : 'bg-primary'}`}>
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
                 </div>
                 
                 {/* Content Card */}
                 <div 
                   onClick={() => onOpenTicket?.(note.id)}
-                  className="bg-surface-container-lowest border border-outline-variant shadow-sm rounded-2xl p-5 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group"
+                  className={`bg-surface-container-lowest border ${isAbsence ? 'border-error/30 bg-error/5' : isAttendance ? 'border-[#10B981]/30 bg-[#10B981]/5' : 'border-outline-variant'} shadow-sm rounded-2xl p-5 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-3">
@@ -553,13 +557,18 @@ export default function PatientHistory({ patient, onOpenTicket }: { patient: any
                         return <span key={i} className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm font-medium self-start shadow-sm"><span className="material-symbols-outlined text-[16px]">account_balance_wallet</span>{line.replace('• O. Social: ', 'Obra Social: ')}</span>;
                       } else if (line.trim() === '') {
                         return null;
+                      } else if (line.includes('AUSENTE al turno programado')) {
+                        return <span key={i} className="inline-flex items-center gap-1.5 bg-error/10 text-error border border-error/20 px-3 py-1.5 rounded-lg text-sm font-bold self-start mt-1"><span className="material-symbols-outlined text-[18px]">cancel</span>{line}</span>;
+                      } else if (line.includes('asistió al turno programado')) {
+                        return <span key={i} className="inline-flex items-center gap-1.5 bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20 px-3 py-1.5 rounded-lg text-sm font-bold self-start mt-1"><span className="material-symbols-outlined text-[18px]">check_circle</span>{line}</span>;
                       }
                       return <p key={i} className={i === 0 ? '' : 'mt-1 whitespace-pre-wrap'}>{line}</p>;
                     })}
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -230,7 +230,7 @@ export default function PatientBilling({
               <div 
                 key={bill.id} 
                 id={`bill-${bill.id}`}
-                className={`bg-surface-container-lowest border rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-500 flex flex-col ${
+                className={`bg-surface-container-lowest border rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 flex flex-col ${
                   highlightedBillId === bill.id 
                     ? 'ring-4 ring-primary border-primary bg-primary/5 scale-[1.02]' 
                     : 'border-outline-variant'
