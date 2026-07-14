@@ -146,6 +146,9 @@ export default function PatientHistory({ patient, onOpenTicket }: { patient: any
           .eq('id', editingNoteId);
 
         if (error) throw error;
+        
+        // Update patient's updated_at
+        await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', patientId);
 
         // If new treatments were added during edit, add them to the bill
         if (finalTreatments.length > 0) {
@@ -193,6 +196,9 @@ export default function PatientHistory({ patient, onOpenTicket }: { patient: any
           .single();
 
         if (error) throw error;
+
+        // Update patient's updated_at
+        await supabase.from('patients').update({ updated_at: new Date().toISOString() }).eq('id', patientId);
 
         // Automatically create a Bill if treatments were selected for this note
         if (finalTreatments.length > 0) {

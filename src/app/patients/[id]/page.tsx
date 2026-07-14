@@ -9,6 +9,11 @@ import PatientHistory from '@/components/PatientHistory';
 import PatientBudgets from '@/components/PatientBudgets';
 import PatientBilling from '@/components/PatientBilling';
 import AlertDialog from '@/components/AlertDialog';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { es } from 'date-fns/locale';
+
+registerLocale('es', es);
 
 export default function PatientDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -78,7 +83,7 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
     try {
       const { error } = await supabase
         .from('patients')
-        .update({ odontogram_state: odontogramState })
+        .update({ odontogram_state: odontogramState, updated_at: new Date().toISOString() })
         .eq('id', id);
         
       if (error) throw error;
@@ -111,7 +116,7 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
     try {
       const { error } = await supabase
         .from('patients')
-        .update(editForm)
+        .update({ ...editForm, updated_at: new Date().toISOString() })
         .eq('id', id);
         
       if (error) throw error;
@@ -242,7 +247,7 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
 
       {/* Helper para renderizar campos editables */}
       {(() => {
-        const EditableField = ({ label, field, type = 'text', isTextArea = false, isSelect = false, options = [] }: { label: string, field: string, type?: string, isTextArea?: boolean, isSelect?: boolean, options?: {value: string, label: string}[] }) => {
+        const renderEditableField = ({ label, field, type = 'text', isTextArea = false, isSelect = false, options = [] }: { label: string, field: string, type?: string, isTextArea?: boolean, isSelect?: boolean, options?: {value: string, label: string}[] }) => {
           if (isEditing) {
             if (isSelect) {
               return (
@@ -270,6 +275,27 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
                 </div>
               );
             }
+            if (field === 'birth_date') {
+              return (
+                <div className="flex flex-col gap-0.5 p-3 rounded-2xl bg-surface-container-lowest border border-outline-variant/30">
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{label}</span>
+                  <DatePicker
+                    selected={editForm[field] ? new Date(editForm[field] + 'T12:00:00Z') : null}
+                    onChange={(date: Date | null) => setEditForm({ ...editForm, [field]: date ? date.toISOString().split('T')[0] : '' })}
+                    locale="es"
+                    dateFormat="dd/MM/yyyy"
+                    showYearDropdown
+                    scrollableYearDropdown
+                    yearDropdownItemNumber={100}
+                    maxDate={new Date()}
+                    placeholderText="DD/MM/AAAA"
+                    className="w-full bg-surface-container border border-outline-variant rounded-xl p-2 text-sm font-medium focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                    wrapperClassName="w-full"
+                  />
+                </div>
+              );
+            }
+
             return (
               <div className="flex flex-col gap-0.5 p-3 rounded-2xl bg-surface-container-lowest border border-outline-variant/30">
                 <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{label}</span>
@@ -352,18 +378,18 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EditableField label="Nombre" field="first_name" />
-            <EditableField label="Apellido" field="last_name" />
-            <EditableField label="Documento (DNI/Pasaporte)" field="document_id" />
-            <EditableField label="Teléfono" field="phone" />
-            <EditableField label="Correo Electrónico" field="email" type="email" />
-            <EditableField label="Fecha de Nacimiento" field="birth_date" type="date" />
-            <EditableField label="Grupo Sanguíneo" field="blood_type" />
-            <EditableField label="Obra Social" field="insurance_id" isSelect options={[{value: '', label: 'Particular'}, ...insurances.map(i => ({value: i.id, label: i.name}))]} />
-            <EditableField label="Número de Afiliado (Obra Social)" field="affiliate_number" />
+            {renderEditableField({ label: "Nombre", field: "first_name" })}
+            {renderEditableField({ label: "Apellido", field: "last_name" })}
+            {renderEditableField({ label: "Documento (DNI/Pasaporte)", field: "document_id" })}
+            {renderEditableField({ label: "Teléfono", field: "phone" })}
+            {renderEditableField({ label: "Correo Electrónico", field: "email", type: "email" })}
+            {renderEditableField({ label: "Fecha de Nacimiento", field: "birth_date", type: "text" })}
+            {renderEditableField({ label: "Grupo Sanguíneo", field: "blood_type" })}
+            {renderEditableField({ label: "Obra Social", field: "insurance_id", isSelect: true, options: [{value: '', label: 'Particular'}, ...insurances.map(i => ({value: i.id, label: i.name}))] })}
+            {renderEditableField({ label: "Número de Afiliado (Obra Social)", field: "affiliate_number" })}
             <div className="hidden md:block"></div>
-            <EditableField label="Dirección" field="address" isTextArea />
-            <EditableField label="Ocupación" field="occupation" isTextArea />
+            {renderEditableField({ label: "Dirección", field: "address", isTextArea: true })}
+            {renderEditableField({ label: "Ocupación", field: "occupation", isTextArea: true })}
           </div>
         </div>
       )}
@@ -398,13 +424,13 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
             Antecedentes de Salud
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EditableField label="Alergias" field="allergies" isTextArea />
-            <EditableField label="Medicación Habitual y Tratamientos" field="medical_treatments" isTextArea />
-            <EditableField label="Enfermedades Sistémicas" field="systemic_diseases" isTextArea />
-            <EditableField label="Infecciones y Otras" field="infectious_diseases" isTextArea />
-            <EditableField label="Condiciones Específicas" field="specific_conditions" isTextArea />
-            <EditableField label="Quirúrgicos / Hemorragias" field="surgeries" isTextArea />
-            <EditableField label="Hábitos y Estado" field="habits" isTextArea />
+            {renderEditableField({ label: "Alergias", field: "allergies", isTextArea: true })}
+            {renderEditableField({ label: "Medicación Habitual y Tratamientos", field: "medical_treatments", isTextArea: true })}
+            {renderEditableField({ label: "Enfermedades Sistémicas", field: "systemic_diseases", isTextArea: true })}
+            {renderEditableField({ label: "Infecciones y Otras", field: "infectious_diseases", isTextArea: true })}
+            {renderEditableField({ label: "Condiciones Específicas", field: "specific_conditions", isTextArea: true })}
+            {renderEditableField({ label: "Quirúrgicos / Hemorragias", field: "surgeries", isTextArea: true })}
+            {renderEditableField({ label: "Hábitos y Estado", field: "habits", isTextArea: true })}
           </div>
 
           <h3 className="text-lg font-bold text-on-surface mb-4 mt-12 flex items-center gap-2">
@@ -412,11 +438,11 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
             Historia Clínica Odontológica
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EditableField label="Motivo Principal de Consulta" field="main_complaint" isTextArea />
-            <EditableField label="Evaluación del Dolor" field="pain_history" isTextArea />
-            <EditableField label="Traumatismos Previos" field="dental_trauma" isTextArea />
-            <EditableField label="Dificultades Funcionales" field="functional_difficulties" isTextArea />
-            <EditableField label="Plan de Tratamiento y Observaciones" field="treatment_plan" isTextArea />
+            {renderEditableField({ label: "Motivo Principal de Consulta", field: "main_complaint", isTextArea: true })}
+            {renderEditableField({ label: "Evaluación del Dolor", field: "pain_history", isTextArea: true })}
+            {renderEditableField({ label: "Traumatismos Previos", field: "dental_trauma", isTextArea: true })}
+            {renderEditableField({ label: "Dificultades Funcionales", field: "functional_difficulties", isTextArea: true })}
+            {renderEditableField({ label: "Plan de Tratamiento y Observaciones", field: "treatment_plan", isTextArea: true })}
           </div>
         </div>
       )}

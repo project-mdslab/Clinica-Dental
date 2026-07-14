@@ -178,6 +178,13 @@ export default function CalendarPage() {
     }
   };
 
+  const fetchServices = async () => {
+    const { data, error } = await supabase.from('calendar_services').select('id, name, color').order('created_at', { ascending: true });
+    if (data) {
+      setServices(data);
+    }
+  };
+
   // Volver a cargar si cambiamos de mes (Carga Inteligente)
   useEffect(() => {
     fetchCalendarData();
@@ -206,20 +213,6 @@ export default function CalendarPage() {
       })
       .subscribe();
 
-    const fetchServices = async () => {
-      const { data, error } = await supabase.from('calendar_services').select('id, name, color').order('created_at', { ascending: true });
-      if (data && data.length > 0) {
-        setServices(data);
-      } else {
-        const defaultServices = [
-          { name: 'Consulta', color: 'bg-primary' },
-          { name: 'Cirugía', color: 'bg-[#EF4444]' },
-          { name: 'Endodoncia', color: 'bg-[#F59E0B]' },
-          { name: 'Limpieza', color: 'bg-[#10B981]' },
-        ];
-        setServices(defaultServices);
-      }
-    };
     fetchServices();
 
     const storedUnav = localStorage.getItem('clinic_unavailabilities');
@@ -1329,7 +1322,9 @@ export default function CalendarPage() {
     <ServicesConfigModal 
       isOpen={isServicesConfigOpen} 
       onClose={() => setIsServicesConfigOpen(false)} 
-      services={services} 
+      services={services}
+      onSuccess={fetchServices}
+      onOptimisticUpdate={setServices}
     />
 
       {/* Modal de Detalle de Cita */}

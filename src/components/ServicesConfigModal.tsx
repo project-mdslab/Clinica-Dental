@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Portal from './Portal';
 import { createClient } from '@/utils/supabase/client';
+import AlertDialog from '@/components/AlertDialog';
 
 interface Service {
   id?: string;
@@ -13,6 +14,8 @@ interface ServicesConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   services: Service[];
+  onSuccess?: () => void;
+  onOptimisticUpdate?: (services: Service[]) => void;
 }
 
 const PRESET_COLORS = [
@@ -21,7 +24,7 @@ const PRESET_COLORS = [
   'bg-[#F43F5E]', 'bg-[#84CC16]', 'bg-[#64748B]', 'bg-[#A855F7]'
 ];
 
-export default function ServicesConfigModal({ isOpen, onClose, services }: ServicesConfigModalProps) {
+export default function ServicesConfigModal({ isOpen, onClose, services, onSuccess, onOptimisticUpdate }: ServicesConfigModalProps) {
   const supabase = createClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -31,6 +34,11 @@ export default function ServicesConfigModal({ isOpen, onClose, services }: Servi
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
+
+  const showAlert = (message: string, title?: string) => {
+    setAlertDialog({ isOpen: true, title: title || 'Atención', message, type: 'alert', onConfirm: () => setAlertDialog(prev => ({ ...prev, isOpen: false })), confirmText: 'Aceptar' });
+  };
 
   if (!isOpen) return null;
 
@@ -38,12 +46,14 @@ export default function ServicesConfigModal({ isOpen, onClose, services }: Servi
     e.preventDefault();
     if (!newName.trim()) return;
     setIsLoading(true);
-    const { error } = await supabase.from('calendar_services').insert({ name: newName.trim(), color: newColor });
-    if (!error) {
+    const { data, error } = await supabase.from('calendar_services').insert({ name: newName.trim(), color: newColor }).select().single();
+    if (!error && data) {
+      if (onOptimisticUpdate) onOptimisticUpdate([...services, data]);
       setNewName('');
       setNewColor(PRESET_COLORS[0]);
+      if (onSuccess) onSuccess();
     } else {
-      alert("Error al crear prestación: " + error.message);
+      showAlert("Error al crear prestación: " + error.message);
     }
     setIsLoading(false);
   };
@@ -53,19 +63,36 @@ export default function ServicesConfigModal({ isOpen, onClose, services }: Servi
     setIsLoading(true);
     const { error } = await supabase.from('calendar_services').update({ name: editName.trim(), color: editColor }).eq('id', id);
     if (!error) {
+      if (onOptimisticUpdate) {
+        onOptimisticUpdate(services.map(s => s.id === id ? { ...s, name: editName.trim(), color: editColor } : s));
+      }
       setEditingId(null);
+      if (onSuccess) onSuccess();
     } else {
-      alert("Error al guardar: " + error.message);
+      showAlert("Error al guardar: " + error.message);
     }
     setIsLoading(false);
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de eliminar esta prestación?")) {
-      setIsLoading(true);
-      await supabase.from('calendar_services').delete().eq('id', id);
-      setIsLoading(false);
-    }
+    setAlertDialog({
+      isOpen: true,
+      title: 'Eliminar Prestación',
+      message: '¿Estás seguro de eliminar esta prestación?',
+      type: 'confirm',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        setIsLoading(true);
+        if (onOptimisticUpdate) {
+          onOptimisticUpdate(services.filter(s => s.id !== id));
+        }
+        await supabase.from('calendar_services').delete().eq('id', id);
+        if (onSuccess) onSuccess();
+        setIsLoading(false);
+        onClose();
+      }
+    });
   };
 
   return (
@@ -221,6 +248,16 @@ export default function ServicesConfigModal({ isOpen, onClose, services }: Servi
           </div>
         </div>
       </div>
+      
+      <AlertDialog 
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type={alertDialog.type}
+        onConfirm={alertDialog.onConfirm}
+        onCancel={() => setAlertDialog(prev => ({ ...prev, isOpen: false }))}
+        confirmText={alertDialog.confirmText}
+      />
     </Portal>
   );
 }

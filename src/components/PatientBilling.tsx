@@ -155,6 +155,31 @@ export default function PatientBilling({
     }
   };
 
+  const handleDeleteBill = (billId: string) => {
+    if (patientId === '1') {
+      showAlert("No se puede editar el paciente de prueba.");
+      return;
+    }
+    setAlertDialog({
+      isOpen: true,
+      title: 'Eliminar Estado de Cuenta',
+      message: '¿Estás seguro de que deseas eliminar este registro de facturación? Se borrarán también los ítems y pagos asociados. Esta acción no se puede deshacer.',
+      type: 'confirm',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          const { error } = await supabase.from('bills').delete().eq('id', billId);
+          if (error) throw error;
+          fetchBills();
+        } catch (error: any) {
+          console.error("Error deleting bill:", error);
+          showAlert("Error al eliminar la facturación: " + error.message);
+        }
+      }
+    });
+  };
+
   const handleShareBill = async (bill: Bill) => {
     try {
       const formattedDate = new Date(bill.created_at).toLocaleDateString('es-AR', {
@@ -291,6 +316,13 @@ export default function PatientBilling({
                   >
                     <span className="material-symbols-outlined text-[18px]">print</span>
                     Ticket
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteBill(bill.id)}
+                    className="bg-error/10 hover:bg-error/20 text-error px-3 rounded-xl transition-colors flex items-center justify-center shrink-0"
+                    title="Eliminar Facturación"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
                   </button>
                   {!isFullyPaid && (
                     <button 

@@ -217,6 +217,35 @@ export default function PatientBudgets({ patient }: { patient: any }) {
     }
   };
 
+  const handleDeleteBudget = (budgetId: string) => {
+    if (patientId === '1') {
+      showAlert("No se puede editar el paciente de prueba.");
+      return;
+    }
+    setAlertDialog({
+      isOpen: true,
+      title: 'Eliminar Presupuesto',
+      message: '¿Estás seguro de que deseas eliminar este presupuesto? Esta acción no se puede deshacer y eliminará todos sus ítems y pagos asociados.',
+      type: 'confirm',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          // Primero eliminamos la factura (bill) vinculada, si existe, para limpiar el Estado de Cuenta
+          await supabase.from('bills').delete().eq('budget_id', budgetId);
+          
+          // Luego eliminamos el presupuesto (sus items se borran en cascada o manual si hiciera falta, pero asumiendo cascade o ya limpia)
+          const { error } = await supabase.from('budgets').delete().eq('id', budgetId);
+          if (error) throw error;
+          fetchBudgets();
+        } catch (err: any) {
+          console.error("Error deleting budget:", err);
+          showAlert("Error al eliminar presupuesto: " + err.message);
+        }
+      }
+    });
+  };
+
   const handleAddPayment = async (budgetId: string) => {
     if (patientId === '1') {
       showAlert("No se puede editar el paciente de prueba.");
@@ -588,6 +617,13 @@ export default function PatientBudgets({ patient }: { patient: any }) {
                         title="Imprimir Presupuesto"
                       >
                         <span className="material-symbols-outlined text-[20px]">print</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteBudget(budget.id)}
+                        className="bg-error/10 hover:bg-error/20 text-error p-2 rounded-xl transition-colors flex items-center justify-center ml-2"
+                        title="Eliminar Presupuesto"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">delete</span>
                       </button>
                     </div>
                     <button 

@@ -28,7 +28,7 @@ export default function AlertDialog({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="bg-surface rounded-3xl shadow-2xl w-[90vw] sm:w-[384px] overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6">
           <h3 className="text-xl font-black text-on-surface mb-2">

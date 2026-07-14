@@ -4,9 +4,13 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import AlertDialog from '@/components/AlertDialog';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+registerLocale('es', es);
 
 export default function PatientsPage() {
   const router = useRouter();
@@ -71,7 +75,7 @@ export default function PatientsPage() {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select('id, first_name, last_name, document_id, phone, email, created_at, insurance_id')
+        .select('id, first_name, last_name, document_id, phone, email, created_at, updated_at, insurance_id')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -131,8 +135,8 @@ export default function PatientsPage() {
       return 0;
     }
     if (sortField === 'recent') {
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
       return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
     }
     return 0;
@@ -191,6 +195,28 @@ export default function PatientsPage() {
       });
       fetchPatients();
     }
+  };
+
+  const handleDeletePatient = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setAlertDialog({
+      isOpen: true,
+      title: 'Eliminar Paciente',
+      message: '¿Estás seguro de que deseas eliminar este paciente? Esta acción no se puede deshacer y borrará toda su historia clínica.',
+      type: 'confirm',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          const { error } = await supabase.from('patients').delete().eq('id', id);
+          if (error) throw error;
+          fetchPatients();
+        } catch (err: any) {
+          console.error("Error deleting patient:", err);
+          showAlert("Error al eliminar paciente. Es posible que tenga registros asociados (turnos, facturas, presupuestos). " + err.message);
+        }
+      }
+    });
   };
 
   // Stats calculations
@@ -384,7 +410,14 @@ export default function PatientsPage() {
                       <td className="py-4 px-6 text-sm text-on-surface-variant text-right">
                         <div className="flex items-center justify-end gap-3">
                           <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary font-bold text-[11px] tracking-wider uppercase bg-primary/10 px-2 py-1 rounded-md hidden md:block">Abrir Ficha</span>
-                          <span>Hace 2 meses</span>
+                          <button 
+                            onClick={(e) => handleDeletePatient(e, patient.id)}
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-error/10 hover:bg-error/20 text-error p-1.5 rounded-lg flex items-center justify-center shrink-0"
+                            title="Eliminar Paciente"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                          <span>Hace {formatDistanceToNow(parseISO(patient.updated_at || patient.created_at || new Date().toISOString()), { locale: es })}</span>
                         </div>
                       </td>
                     </tr>
@@ -492,7 +525,21 @@ export default function PatientsPage() {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-on-surface-variant">Fecha de Nac.</label>
-                        <input name="birth_date" value={formData.birth_date} onChange={handleInputChange} type="date" className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" />
+                        <DatePicker
+                          selected={formData.birth_date ? new Date(formData.birth_date + 'T12:00:00Z') : null}
+                          onChange={(date: Date | null) => {
+                            setFormData({ ...formData, birth_date: date ? date.toISOString().split('T')[0] : '' });
+                          }}
+                          locale="es"
+                          dateFormat="dd/MM/yyyy"
+                          showYearDropdown
+                          scrollableYearDropdown
+                          yearDropdownItemNumber={100}
+                          maxDate={new Date()}
+                          placeholderText="DD/MM/AAAA"
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                          wrapperClassName="w-full"
+                        />
                       </div>
                     </div>
 
