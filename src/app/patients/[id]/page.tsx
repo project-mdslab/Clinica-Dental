@@ -286,7 +286,18 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
           // View Mode
           const val = patient[field];
           let displayVal = val || '-';
-          if (val && field === 'birth_date') displayVal = new Date(val).toLocaleDateString();
+          if (val && field === 'birth_date') {
+            if (typeof val === 'string' && val.includes('-')) {
+              const parts = val.split('T')[0].split('-');
+              if (parts.length === 3) {
+                displayVal = `${parts[2]}/${parts[1]}/${parts[0]}`;
+              } else {
+                displayVal = new Date(val).toLocaleDateString();
+              }
+            } else {
+              displayVal = new Date(val).toLocaleDateString();
+            }
+          }
           if (field === 'insurance_id') {
             displayVal = val ? insurances.find(i => i.id === val)?.name || '-' : 'Particular';
           }

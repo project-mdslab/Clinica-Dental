@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import AppLayout from "@/components/AppLayout";
+import { createClient } from "@/utils/supabase/server";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 
 const poppins = Poppins({
   weight: ["300", "400", "500", "600", "700"],
@@ -8,9 +11,6 @@ const poppins = Poppins({
   display: "swap",
   variable: "--font-poppins",
 });
-
-import AppLayout from "@/components/AppLayout";
-import { createClient } from "@/utils/supabase/server";
 
 export const metadata: Metadata = {
   title: "Bina Odontología Integral",
@@ -26,8 +26,6 @@ export const metadata: Metadata = {
 export const viewport = {
   themeColor: "#8C7156",
 };
-
-import { NotificationProvider } from "@/contexts/NotificationContext";
 
 export default async function RootLayout({
   children,
@@ -52,6 +50,10 @@ export default async function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL,GRAD,opsz@400,0,0,24&display=swap"
           rel="stylesheet"
         />
+        <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Bina Odonto" />
       </head>
       <body>
         <NotificationProvider>

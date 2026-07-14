@@ -20,7 +20,15 @@ export default function PatientsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
   const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
+
+  // Reset to first page on search or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sortField, sortOrder]);
 
   const showAlert = (message: string, title?: string) => {
     setAlertDialog({ isOpen: true, title: title || 'Atención', message, type: 'alert', onConfirm: () => setAlertDialog(prev => ({ ...prev, isOpen: false })), confirmText: 'Aceptar' });
@@ -63,7 +71,8 @@ export default function PatientsPage() {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select('*')
+        .select('id, first_name, last_name, document_id, phone, email, created_at, insurance_id')
+        .neq('id', '1')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -125,6 +134,9 @@ export default function PatientsPage() {
     }
     return 0;
   });
+
+  const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
+  const paginatedPatients = filteredPatients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleSort = (field: 'name' | 'insurance' | 'recent') => {
     if (sortField === field) {
@@ -301,7 +313,7 @@ export default function PatientsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredPatients.map(patient => (
+                  paginatedPatients.map(patient => (
                     <tr 
                       key={patient.id} 
                       onClick={() => router.push(`/patients/${patient.id}`)} 
@@ -378,6 +390,46 @@ export default function PatientsPage() {
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/50 bg-surface-container-lowest mt-auto">
+              <span className="text-sm text-on-surface-variant font-medium">
+                Mostrando {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredPatients.length)} de {filteredPatients.length} pacientes
+              </span>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-on-surface-variant hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                </button>
+                
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                      currentPage === page 
+                        ? 'bg-primary text-on-primary shadow-sm' 
+                        : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-on-surface-variant hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

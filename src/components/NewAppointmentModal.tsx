@@ -9,11 +9,13 @@ interface NewAppointmentModalProps {
   services?: {name: string, color: string}[];
   onClose: () => void;
   onSuccess: () => void;
+  appointmentToEdit?: any;
+  initialTime?: string;
 }
 
 
 
-export default function NewAppointmentModal({ isOpen, services, onClose, onSuccess }: NewAppointmentModalProps) {
+export default function NewAppointmentModal({ isOpen, services, onClose, onSuccess, appointmentToEdit, initialTime }: NewAppointmentModalProps) {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'existing' | 'new'>('existing');
   
@@ -37,8 +39,58 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
   useEffect(() => {
     if (isOpen) {
       fetchPatients();
+      
+      if (appointmentToEdit) {
+        // Pre-fill form with appointmentToEdit
+        setSearch('');
+        setSelectedPatientId(appointmentToEdit.patient_id || '');
+        setDate(appointmentToEdit.date || format(new Date(), 'yyyy-MM-dd'));
+        
+        // Remove seconds if present (e.g. 09:00:00 -> 09:00)
+        const st = appointmentToEdit.start_time ? appointmentToEdit.start_time.substring(0, 5) : '09:00';
+        const et = appointmentToEdit.end_time ? appointmentToEdit.end_time.substring(0, 5) : '09:30';
+        setStartTime(st);
+        setEndTime(et);
+        
+        setServiceType(appointmentToEdit.type || appointmentToEdit.service_type || '');
+        if (appointmentToEdit.professional_id) {
+          setProfessionalId(appointmentToEdit.professional_id);
+        }
+      } else {
+        // Reset form for new appointment
+        setSearch('');
+        setSelectedPatientId('');
+        setNewPatient({ first_name: '', last_name: '', phone: '' });
+        setDate(format(new Date(), 'yyyy-MM-dd'));
+        
+        if (initialTime) {
+          setStartTime(initialTime);
+          const [h, m] = initialTime.split(':');
+          const nextH = (parseInt(h) + 1).toString().padStart(2, '0');
+          setEndTime(`${nextH}:${m}`);
+        } else {
+          setStartTime('09:00');
+          setEndTime('10:00');
+        }
+        
+        setServiceType('');
+        if (professionals.length > 0 && !professionalId) {
+          setProfessionalId(professionals[0].id);
+        }
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, appointmentToEdit, initialTime]);
+
+  const handleStartTimeChange = (newStartTime: string) => {
+    setStartTime(newStartTime);
+    if (newStartTime) {
+      const [hours, minutes] = newStartTime.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes + 30, 0, 0); // Sumar 30 minutos
+      const newEndTime = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      setEndTime(newEndTime);
+    }
+  };
 
   const fetchPatients = async () => {
     const { data } = await supabase.from('patients').select('id, first_name, last_name, document_id, phone');
@@ -95,38 +147,55 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
         return;
       }
 
-      // Insert appointment
-      const { error: appError } = await supabase
-        .from('appointments')
-        .insert({
-          user_id: user.id,
-          patient_id: finalPatientId,
-          professional_id: professionalId, // Actually professional_id is a UUID in schema, but we'll try to insert the string '1'. Supabase might fail if type is strictly UUID.
-          date: date,
-          start_time: `${startTime}:00`,
-          end_time: `${endTime}:00`,
-          service_type: serviceType,
-          status: 'Scheduled'
-        });
-
-      if (appError) {
-        const fallbackId = (await supabase.auth.getUser()).data.user?.id;
-        const finalProfId = fallbackId || professionalId;
-        console.warn("Retrying with fallback user ID", appError);
-        
-        const { error: retryError } = await supabase
+      if (appointmentToEdit) {
+        // Update existing appointment
+        const { error: updateError } = await supabase
+          .from('appointments')
+          .update({
+            patient_id: finalPatientId,
+            professional_id: professionalId,
+            date: date,
+            start_time: `${startTime}:00`,
+            end_time: `${endTime}:00`,
+            service_type: serviceType
+          })
+          .eq('id', appointmentToEdit.id);
+          
+        if (updateError) throw updateError;
+      } else {
+        // Insert new appointment
+        const { error: appError } = await supabase
           .from('appointments')
           .insert({
-            user_id: fallbackId,
-            professional_id: finalProfId,
+            user_id: user.id,
             patient_id: finalPatientId,
+            professional_id: professionalId, // Actually professional_id is a UUID in schema, but we'll try to insert the string '1'. Supabase might fail if type is strictly UUID.
             date: date,
             start_time: `${startTime}:00`,
             end_time: `${endTime}:00`,
             service_type: serviceType,
             status: 'Scheduled'
           });
-        if (retryError) throw retryError;
+
+        if (appError) {
+          const fallbackId = (await supabase.auth.getUser()).data.user?.id;
+          const finalProfId = fallbackId || professionalId;
+          console.warn("Retrying with fallback user ID", appError);
+          
+          const { error: retryError } = await supabase
+            .from('appointments')
+            .insert({
+              user_id: fallbackId,
+              professional_id: finalProfId,
+              patient_id: finalPatientId,
+              date: date,
+              start_time: `${startTime}:00`,
+              end_time: `${endTime}:00`,
+              service_type: serviceType,
+              status: 'Scheduled'
+            });
+          if (retryError) throw retryError;
+        }
       }
 
       onSuccess();
@@ -146,34 +215,40 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
         <div className="bg-surface-container-lowest w-full max-w-2xl rounded-3xl shadow-xl overflow-hidden border border-outline-variant flex flex-col max-h-[90vh]">
         
         <div className="p-6 border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
-          <h2 className="text-xl font-display-sm text-on-surface">Agendar Nuevo Turno</h2>
+          <h2 className="text-xl font-display-sm text-on-surface flex items-center gap-2">
+            {appointmentToEdit?.service_type === 'GUARDIA' && <span className="material-symbols-outlined text-[#D97706]">health_and_safety</span>}
+            {appointmentToEdit 
+              ? (appointmentToEdit.service_type === 'GUARDIA' ? 'Editar Guardia' : 'Editar Turno') 
+              : 'Agendar Nuevo Turno'}
+          </h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container transition-colors">
             <span className="material-symbols-outlined text-[20px] text-on-surface-variant">close</span>
           </button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1">
-          {/* Tabs */}
-          <div className="flex bg-surface-container p-1 rounded-xl mb-6">
-            <button 
-              type="button"
-              onClick={() => setActiveTab('existing')}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'existing' ? 'bg-surface shadow text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Paciente Existente
-            </button>
-            <button 
-              type="button"
-              onClick={() => setActiveTab('new')}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'new' ? 'bg-surface shadow text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              Nuevo Paciente (Precarga)
-            </button>
-          </div>
-
           <form id="appointment-form" onSubmit={handleSubmit} className="space-y-6">
             
-            {activeTab === 'existing' && (
+            {appointmentToEdit?.service_type !== 'GUARDIA' && (
+              <div className="flex bg-surface-container p-1 rounded-xl mb-6">
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('existing')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'existing' ? 'bg-surface shadow text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  Paciente Existente
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('new')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'new' ? 'bg-surface shadow text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  Nuevo Paciente (Precarga)
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'existing' && appointmentToEdit?.service_type !== 'GUARDIA' && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-on-surface-variant mb-1">Buscar Paciente</label>
@@ -253,7 +328,7 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
               </div>
             )}
 
-            <div className="h-px bg-outline-variant/50 w-full my-6"></div>
+            {appointmentToEdit?.service_type !== 'GUARDIA' && <div className="h-px bg-outline-variant/50 w-full my-6"></div>}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -272,7 +347,7 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
                   type="time"
                   required
                   value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  onChange={(e) => handleStartTimeChange(e.target.value)}
                   className="w-full bg-surface border border-outline-variant rounded-xl py-2 px-3 text-sm text-on-surface focus:border-primary outline-none transition-all"
                 />
               </div>
@@ -290,7 +365,7 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-on-surface-variant mb-1">Profesional</label>
+                <label className="block text-sm font-semibold text-on-surface-variant mb-1">Profesional a cargo</label>
                 <select 
                   value={professionalId}
                   onChange={(e) => setProfessionalId(e.target.value)}
@@ -301,19 +376,21 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-on-surface-variant mb-1">Práctica</label>
-                <select 
-                  value={serviceType}
-                  onChange={(e) => setServiceType(e.target.value)}
-                  className="w-full bg-surface border border-outline-variant rounded-xl py-2 px-3 text-sm text-on-surface focus:border-primary outline-none transition-all"
-                >
-                  <option value="">-- Opcional --</option>
-                  {services?.map(srv => (
-                    <option key={srv.name} value={srv.name}>{srv.name}</option>
-                  ))}
-                </select>
-              </div>
+              {appointmentToEdit?.service_type !== 'GUARDIA' && (
+                <div>
+                  <label className="block text-sm font-semibold text-on-surface-variant mb-1">Práctica</label>
+                  <select 
+                    value={serviceType}
+                    onChange={(e) => setServiceType(e.target.value)}
+                    className="w-full bg-surface border border-outline-variant rounded-xl py-2 px-3 text-sm text-on-surface focus:border-primary outline-none transition-all"
+                  >
+                    <option value="">-- Opcional --</option>
+                    {services?.map(srv => (
+                      <option key={srv.name} value={srv.name}>{srv.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
           </form>
@@ -330,10 +407,10 @@ export default function NewAppointmentModal({ isOpen, services, onClose, onSucce
           <button 
             type="submit"
             form="appointment-form"
-            disabled={isSubmitting || (activeTab === 'existing' && !selectedPatientId)}
+            disabled={isSubmitting || (activeTab === 'existing' && !selectedPatientId && appointmentToEdit?.service_type !== 'GUARDIA')}
             className="px-6 py-2 rounded-xl text-sm font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
           >
-            {isSubmitting ? 'Guardando...' : 'Agendar Turno'}
+            {isSubmitting ? 'Guardando...' : (appointmentToEdit?.service_type === 'GUARDIA' ? 'Guardar Cambios' : 'Agendar Turno')}
             {!isSubmitting && <span className="material-symbols-outlined text-[18px]">check</span>}
           </button>
           </div>

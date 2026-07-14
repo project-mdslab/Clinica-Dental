@@ -7,6 +7,7 @@ import AlertDialog from '@/components/AlertDialog';
 import Link from 'next/link';
 import NewAppointmentModal from '@/components/NewAppointmentModal';
 import Portal from '@/components/Portal';
+import ServicesConfigModal from '@/components/ServicesConfigModal';
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -22,14 +23,20 @@ export default function CalendarPage() {
   // Instancia de Supabase
   const supabase = createClient();
 
-  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [appointmentToEdit, setAppointmentToEdit] = useState<any>(null);
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
+  const [selectedTimeForNew, setSelectedTimeForNew] = useState<string | undefined>(undefined);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [isServicesConfigOpen, setIsServicesConfigOpen] = useState(false);
+  const [isProfessionalsExpanded, setIsProfessionalsExpanded] = useState(true);
+  const [isServicesExpanded, setIsServicesExpanded] = useState(true);
+  const [isGuardiasModalOpen, setIsGuardiasModalOpen] = useState(false);
   const [toast, setToast] = useState<{message: string, visible: boolean, type: 'success' | 'error'}>({message: '', visible: false, type: 'success'});
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -40,7 +47,7 @@ export default function CalendarPage() {
   };
 
   // Prestaciones dinámicas
-  const [services, setServices] = useState<{name: string, color: string}[]>([]);
+  const [services, setServices] = useState<{id?: string, name: string, color: string}[]>([]);
   const [newServiceName, setNewServiceName] = useState('');
   const [professionals, setProfessionals] = useState<any[]>([]);
 
@@ -120,10 +127,16 @@ export default function CalendarPage() {
     const realProfessionals = profs || [];
     setProfessionals(realProfessionals);
 
+    // Carga Inteligente: Solo traemos 2 meses hacia atrás y 3 meses hacia adelante
+    const startRange = format(subMonths(currentDate, 2), 'yyyy-MM-dd');
+    const endRange = format(addMonths(currentDate, 3), 'yyyy-MM-dd');
+
     // Fetch appointments
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, patients(first_name, last_name, id)');
+      .select('*, patients(first_name, last_name, id)')
+      .gte('date', startRange)
+      .lte('date', endRange);
       
     if (error) {
       console.error("Error fetching appointments:", error);
@@ -165,6 +178,11 @@ export default function CalendarPage() {
     }
   };
 
+  // Volver a cargar si cambiamos de mes (Carga Inteligente)
+  useEffect(() => {
+    fetchCalendarData();
+  }, [format(currentDate, 'yyyy-MM')]);
+
   useEffect(() => {
     const fetchUserRole = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -178,19 +196,31 @@ export default function CalendarPage() {
     fetchUserRole();
     fetchCalendarData();
 
-    const storedServices = localStorage.getItem('clinic_services');
-    if (storedServices) {
-      setServices(JSON.parse(storedServices));
-    } else {
-      const defaultServices = [
-        { name: 'Consulta', color: 'bg-primary' },
-        { name: 'Cirugía', color: 'bg-[#EF4444]' },
-        { name: 'Endodoncia', color: 'bg-[#F59E0B]' },
-        { name: 'Limpieza', color: 'bg-[#10B981]' },
-      ];
-      setServices(defaultServices);
-      localStorage.setItem('clinic_services', JSON.stringify(defaultServices));
-    }
+    // Supabase Realtime Subscriptions
+    const channel = supabase.channel('calendar-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+        fetchCalendarData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_services' }, () => {
+        fetchServices();
+      })
+      .subscribe();
+
+    const fetchServices = async () => {
+      const { data, error } = await supabase.from('calendar_services').select('id, name, color').order('created_at', { ascending: true });
+      if (data && data.length > 0) {
+        setServices(data);
+      } else {
+        const defaultServices = [
+          { name: 'Consulta', color: 'bg-primary' },
+          { name: 'Cirugía', color: 'bg-[#EF4444]' },
+          { name: 'Endodoncia', color: 'bg-[#F59E0B]' },
+          { name: 'Limpieza', color: 'bg-[#10B981]' },
+        ];
+        setServices(defaultServices);
+      }
+    };
+    fetchServices();
 
     const storedUnav = localStorage.getItem('clinic_unavailabilities');
     if (storedUnav) {
@@ -204,47 +234,77 @@ export default function CalendarPage() {
     if (window.innerWidth < 768) {
       setView('day');
     }
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  // Auto-scroll to first appointment
+  // Auto-scroll al horario actual
   useEffect(() => {
     if (view === 'day' || view === 'week') {
-      const displayEvents = events;
-      const visibleEvents = view === 'day' 
-        ? displayEvents.filter(ev => ev.date === format(currentDate, 'yyyy-MM-dd'))
-        : displayEvents.filter(ev => {
-            const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-            const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-            const evDate = parseISO(ev.date);
-            return evDate >= weekStart && evDate <= weekEnd;
-          });
-
-      if (visibleEvents.length > 0 && scrollContainerRef.current) {
-        const earliestHour = Math.min(...visibleEvents.map(e => e.startHour));
-        if (earliestHour >= 6) {
-          const pixelsToScroll = (earliestHour - 6) * 80;
-          // Smooth scroll looks better but jumping is sometimes preferred. Let's jump.
-          scrollContainerRef.current.scrollTo({ top: Math.max(0, pixelsToScroll - 40), behavior: 'smooth' });
-        }
+      if (scrollContainerRef.current) {
+        // En lugar de ir al primer turno, vamos a la hora actual (o 1 hora antes para dar margen)
+        const currentHour = new Date().getHours();
+        const targetHour = Math.max(6, currentHour - 1);
+        const pixelsToScroll = (targetHour - 6) * 80;
+        
+        // Hacemos el scroll suave
+        scrollContainerRef.current.scrollTo({ top: Math.max(0, pixelsToScroll), behavior: 'smooth' });
       }
     }
-  }, [view, currentDate, events, userRole, currentUserId]);
+  }, [view, currentDate]);
 
-  const handleAddService = (e: React.FormEvent) => {
+  // Notificación de Guardias para el día de mañana
+  useEffect(() => {
+    if (events.length === 0) return;
+    
+    const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+    const guardiasTomorrow = events.filter(ev => ev.title === 'GUARDIA' && ev.date === tomorrow);
+    
+    if (guardiasTomorrow.length > 0) {
+      const alreadyNotified = sessionStorage.getItem('guardia_notified_' + tomorrow);
+      if (!alreadyNotified) {
+        const profs = Array.from(new Set(guardiasTomorrow.map(g => g.professional))).join(', ');
+        showAlert(`¡Atención! Mañana hay Guardia programada a cargo de: ${profs}.`, 'Recordatorio de Guardia 🔔');
+        sessionStorage.setItem('guardia_notified_' + tomorrow, 'true');
+      }
+    }
+  }, [events]);
+
+  const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newServiceName.trim()) return;
     const colors = ['bg-primary', 'bg-[#34D399]', 'bg-[#60A5FA]', 'bg-[#F59E0B]', 'bg-[#8B5CF6]', 'bg-[#EC4899]'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    const updated = [...services, { name: newServiceName.trim(), color: randomColor }];
-    setServices(updated);
-    localStorage.setItem('clinic_services', JSON.stringify(updated));
+    
+    // Save to Supabase
+    const { data, error } = await supabase
+      .from('calendar_services')
+      .insert({ name: newServiceName.trim(), color: randomColor })
+      .select()
+      .single();
+
+    if (data) {
+      setServices([...services, data]);
+    } else {
+      console.error(error);
+      const updated = [...services, { name: newServiceName.trim(), color: randomColor }];
+      setServices(updated);
+    }
     setNewServiceName('');
   };
 
-  const handleDeleteService = (name: string) => {
+  const handleDeleteService = async (name: string) => {
+    const serviceToDelete = services.find(s => s.name === name);
+    if (serviceToDelete && serviceToDelete.id) {
+      await supabase.from('calendar_services').delete().eq('id', serviceToDelete.id);
+    } else if (serviceToDelete) {
+      // Fallback if no ID is present (e.g. default services not yet in DB)
+      await supabase.from('calendar_services').delete().eq('name', name);
+    }
     const updated = services.filter(s => s.name !== name);
     setServices(updated);
-    localStorage.setItem('clinic_services', JSON.stringify(updated));
   };
 
   const handleDragStart = (e: React.DragEvent, event: any) => {
@@ -455,6 +515,10 @@ export default function CalendarPage() {
                     className="h-20 border-b border-outline-variant/30 hover:bg-surface-container-low/50 transition-colors cursor-pointer"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, dayIdx, hour)}
+                    onClick={() => {
+                      setSelectedTimeForNew(`${hour.toString().padStart(2, '0')}:00`);
+                      setIsNewAppointmentModalOpen(true);
+                    }}
                   >
                   </div>
                 ))}
@@ -483,6 +547,24 @@ export default function CalendarPage() {
                   const endH = Math.floor(ev.startHour + (ev.startMinute + ev.durationMinutes) / 60);
                   const endM = (ev.startMinute + ev.durationMinutes) % 60;
                   const timeString = `${ev.startHour.toString().padStart(2, '0')}:${ev.startMinute.toString().padStart(2, '0')} - ${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                  const isShort = ev.durationMinutes <= 30;
+                  const isGuardia = ev.title === 'GUARDIA';
+                  
+                  if (isGuardia) {
+                    return (
+                      <div 
+                        key={ev.id}
+                        onClick={() => setSelectedAppointment(ev)}
+                        className={`absolute left-0 right-0 mx-1 bg-[#FDE68A] border-2 border-[#D97706] rounded-xl cursor-pointer hover:brightness-95 transition-colors shadow-sm z-20 flex items-center justify-center opacity-90`}
+                        style={{ top: `${top}px`, height: `${height}px` }}
+                      >
+                        <span className="font-bold text-[#D97706] tracking-widest text-sm flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[16px]">health_and_safety</span>
+                          GUARDIA
+                        </span>
+                      </div>
+                    );
+                  }
                   
                   return (
                     <div 
@@ -491,27 +573,44 @@ export default function CalendarPage() {
                       onDragStart={(e) => handleDragStart(e, ev)}
                       onDragEnd={handleDragEnd}
                       onClick={() => setSelectedAppointment(ev)}
-                      className={`absolute left-1 right-1 ${colors.lightBg} border ${colors.border} rounded-xl p-2 cursor-pointer hover:brightness-95 transition-colors shadow-sm z-10 flex flex-col overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
+                      className={`absolute left-1 right-1 ${colors.lightBg} border ${colors.border} rounded-xl ${isShort ? 'py-0.5 px-1.5' : 'p-2'} cursor-pointer hover:brightness-95 transition-colors shadow-sm z-10 flex ${isShort ? 'flex-row items-center justify-between gap-1' : 'flex-col'} overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
+                      {/* Título/Prestación */}
                       {ev.title && ev.title.trim() !== '' && (
-                        <div className="absolute top-1 right-1 bg-white px-1.5 py-0.5 rounded-full shadow-sm border border-outline-variant/30 text-[9px] font-semibold text-on-surface-variant z-10 flex items-center gap-1">
+                        <div className={`${isShort ? 'hidden' : 'absolute top-1 right-1'} bg-white px-1.5 py-0.5 rounded-full shadow-sm border border-outline-variant/30 text-[9px] font-semibold text-on-surface-variant z-10 flex items-center gap-1`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${colors.bg}`}></span>
                           {ev.title}
                         </div>
                       )}
-                      <p className={`text-[10px] font-bold ${colors.text} relative z-0`}>{timeString}</p>
-                      <p className={`text-xs font-bold leading-tight mt-0.5 ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>{ev.patient}</p>
-                      <p className="text-[10px] text-on-surface-variant mt-auto font-medium truncate relative z-0">{ev.professional}</p>
                       
-                      {/* Attendance Indicator (Bottom Right) */}
+                      {/* Contenido (Time + Patient) */}
+                      <div className={`flex ${isShort ? 'flex-row items-center gap-2 overflow-hidden' : 'flex-col'}`}>
+                        <p className={`text-[10px] font-bold ${colors.text} whitespace-nowrap`}>
+                          {isShort ? ev.startHour.toString().padStart(2, '0') + ':' + ev.startMinute.toString().padStart(2, '0') : timeString}
+                        </p>
+                        <div className={`flex items-center gap-1 overflow-hidden ${isShort ? 'w-full' : ''}`}>
+                          {isShort && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors.bg}`}></span>}
+                          <p className={`text-[10px] sm:text-xs font-bold leading-tight ${isShort ? 'truncate' : 'mt-0.5'} ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                            {ev.patient}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {!isShort && (
+                        <p className="text-[10px] text-on-surface-variant mt-auto font-medium truncate relative z-0">
+                          {ev.professional}
+                        </p>
+                      )}
+                      
+                      {/* Attendance Indicator */}
                       {ev.status === 'asistio' && (
-                         <div className="absolute bottom-1 right-1 flex items-center justify-center text-[#10B981] z-10 drop-shadow-sm pointer-events-none">
+                         <div className={`${isShort ? 'relative' : 'absolute bottom-1 right-1'} flex items-center justify-center text-[#10B981] drop-shadow-sm pointer-events-none flex-shrink-0`}>
                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
                          </div>
                       )}
                       {ev.status === 'ausente' && (
-                         <div className="absolute bottom-1 right-1 flex items-center justify-center text-error z-10 drop-shadow-sm pointer-events-none">
+                         <div className={`${isShort ? 'relative' : 'absolute bottom-1 right-1'} flex items-center justify-center text-error drop-shadow-sm pointer-events-none flex-shrink-0`}>
                            <span className="material-symbols-outlined text-[16px]">cancel</span>
                          </div>
                       )}
@@ -599,6 +698,7 @@ export default function CalendarPage() {
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, 'day', hour)}
                   onClick={() => {
+                    setSelectedTimeForNew(`${hour.toString().padStart(2, '0')}:00`);
                     setIsNewAppointmentModalOpen(true);
                   }}
                 >
@@ -630,9 +730,24 @@ export default function CalendarPage() {
                 const endH = Math.floor(ev.startHour + (ev.startMinute + ev.durationMinutes) / 60);
                 const endM = (ev.startMinute + ev.durationMinutes) % 60;
                 const timeString = `${ev.startHour.toString().padStart(2, '0')}:${ev.startMinute.toString().padStart(2, '0')} - ${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-                // Adjust border logic for left-only thick border
-                const leftBorderColor = colors.border.replace('border-', 'border-l-'); // e.g. border-pink-300 -> border-l-pink-300 (wait, tailwind might not support this dynamically if not pre-compiled, let's use style for the left border color or just rely on existing standard colors).
-                // It's safer to just set border-l-[4px] and the border color class.
+                const isShort = ev.durationMinutes <= 30;
+                const isGuardia = ev.title === 'GUARDIA';
+
+                if (isGuardia) {
+                  return (
+                    <div 
+                      key={ev.id}
+                      onClick={() => setSelectedAppointment(ev)}
+                      className={`absolute left-2 right-4 bg-[#FDE68A] border-2 border-[#D97706] rounded-xl cursor-pointer hover:brightness-95 transition-all shadow-md z-[60] flex items-center justify-center opacity-95`}
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      <span className="font-bold text-[#D97706] tracking-widest text-lg flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[24px]">health_and_safety</span>
+                        GUARDIA - {ev.professional}
+                      </span>
+                    </div>
+                  );
+                }
                 
                 return (
                   <div 
@@ -641,58 +756,70 @@ export default function CalendarPage() {
                     onDragStart={(e) => handleDragStart(e, ev)}
                     onDragEnd={handleDragEnd}
                     onClick={() => setSelectedAppointment(ev)}
-                    className={`absolute left-2 right-4 ${colors.lightBg} border-y border-r border-l-4 ${colors.border} rounded-xl p-3 cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex flex-col overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
+                    className={`absolute left-2 right-4 ${colors.lightBg} border-y border-r border-l-4 ${colors.border} rounded-xl ${isShort ? 'py-1 px-2' : 'p-3'} cursor-pointer hover:brightness-95 transition-all shadow-sm z-[40] flex ${isShort ? 'flex-row items-center justify-between gap-2' : 'flex-col'} overflow-hidden group ${ev.status === 'ausente' ? 'opacity-50 grayscale' : ''}`}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
                     {/* Etiqueta de la prestación simulando el Status pill */}
                     {ev.title && ev.title.trim() !== '' && (
-                      <div className="absolute top-2 right-2 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-full shadow-sm border border-outline-variant/30 text-[10px] font-semibold text-on-surface-variant z-10 flex items-center gap-1.5">
+                      <div className={`${isShort ? 'hidden' : 'absolute top-2 right-2'} bg-white/80 backdrop-blur-sm px-2 py-1 rounded-full shadow-sm border border-outline-variant/30 text-[10px] font-semibold text-on-surface-variant z-10 flex items-center gap-1.5`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${colors.bg}`}></span>
                         {ev.title}
                       </div>
                     )}
                     
-                    <div className="flex items-start justify-between mb-1 relative z-0">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded flex items-center justify-center ${colors.bg} text-white shadow-sm opacity-90`}>
+                    <div className={`flex ${isShort ? 'items-center w-full max-w-[80%]' : 'items-start justify-between'} ${isShort ? 'mb-0' : 'mb-1'} relative z-0 overflow-hidden`}>
+                      <div className={`flex items-center gap-2 w-full ${isShort ? 'overflow-hidden' : ''}`}>
+                        <div className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center ${colors.bg} text-white shadow-sm opacity-90 ${isShort ? 'scale-75 origin-left' : ''}`}>
                           <span className="material-symbols-outlined text-[14px]">
                             {ev.title === 'Ortodoncia' ? 'dentistry' : ev.title === 'Implantes' ? 'medical_services' : 'person'}
                           </span>
                         </div>
-                        <div className="pt-0.5">
-                          <span className={`text-sm font-bold block leading-tight truncate max-w-[150px] ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                        <div className={`flex ${isShort ? 'flex-row items-center gap-2 overflow-hidden w-full' : 'flex-col pt-0.5'}`}>
+                          <span className={`text-sm font-bold block leading-tight truncate ${isShort ? 'flex-shrink' : 'max-w-[150px]'} ${ev.status === 'ausente' ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
                             {ev.patient}
                           </span>
-                          <span className={`text-[10px] font-bold ${colors.text} opacity-80 flex items-center gap-1`}>
+                          
+                          {/* Compact details for 30min */}
+                          {isShort && (
+                            <span className={`text-[10px] font-bold ${colors.text} bg-white/50 px-1.5 rounded flex-shrink-0 flex items-center gap-1`}>
+                              <span className={`w-1 h-1 rounded-full ${colors.bg}`}></span>
+                              {ev.title}
+                            </span>
+                          )}
+
+                          <span className={`text-[10px] font-bold ${colors.text} opacity-80 flex-shrink-0 ${isShort ? 'hidden' : 'flex items-center gap-1'}`}>
                             {timeString}
                           </span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="mt-auto flex justify-between items-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                       <span className="bg-white/60 text-[10px] font-bold px-2 py-0.5 rounded text-on-surface-variant truncate max-w-[120px] shadow-sm">
-                         {ev.professional}
-                       </span>
-                       <div className="flex gap-1.5 relative z-20 mr-8">
-                         <Link href={`/patients/${ev.patient_id}`} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Ver Paciente">
-                            <span className="material-symbols-outlined text-[14px]">person</span>
-                         </Link>
-                         <button onClick={(e) => { e.stopPropagation(); setSelectedAppointment(ev); }} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Gestionar Turno">
-                            <span className="material-symbols-outlined text-[14px]">edit</span>
-                         </button>
-                       </div>
-                    </div>
+                    {/* Hover actions and Professional Name - Hidden if short */}
+                    {!isShort && (
+                      <div className="mt-auto flex justify-between items-end opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                         <span className="bg-white/60 text-[10px] font-bold px-2 py-0.5 rounded text-on-surface-variant truncate max-w-[120px] shadow-sm">
+                           {ev.professional}
+                         </span>
+                         <div className="flex gap-1.5 relative z-20 mr-8">
+                           <Link href={`/patients/${ev.patient_id}`} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Ver Paciente">
+                              <span className="material-symbols-outlined text-[14px]">person</span>
+                           </Link>
+                           <button onClick={(e) => { e.stopPropagation(); setSelectedAppointment(ev); }} className="w-7 h-7 bg-white hover:bg-primary hover:text-white rounded-full flex items-center justify-center transition-colors shadow-sm border border-outline-variant/30 text-on-surface-variant" title="Gestionar Turno">
+                              <span className="material-symbols-outlined text-[14px]">edit</span>
+                           </button>
+                         </div>
+                      </div>
+                    )}
                     
-                    {/* Attendance Indicator (Bottom Right) */}
+                    {/* Attendance Indicator */}
                     {ev.status === 'asistio' && (
-                       <div className="absolute bottom-2 right-3 flex items-center justify-center text-[#10B981] z-10 md:group-hover:opacity-0 transition-opacity pointer-events-none drop-shadow-sm">
-                         <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                       <div className={`${isShort ? 'relative' : 'absolute bottom-2 right-3'} flex items-center justify-center text-[#10B981] z-10 transition-opacity pointer-events-none drop-shadow-sm flex-shrink-0`}>
+                         <span className="material-symbols-outlined text-[18px]">check_circle</span>
                        </div>
                     )}
                     {ev.status === 'ausente' && (
-                       <div className="absolute bottom-2 right-3 flex items-center justify-center text-error z-10 md:group-hover:opacity-0 transition-opacity pointer-events-none drop-shadow-sm">
-                         <span className="material-symbols-outlined text-[20px]">cancel</span>
+                       <div className={`${isShort ? 'relative' : 'absolute bottom-2 right-3'} flex items-center justify-center text-error z-10 transition-opacity pointer-events-none drop-shadow-sm flex-shrink-0`}>
+                         <span className="material-symbols-outlined text-[18px]">cancel</span>
                        </div>
                     )}
                   </div>
@@ -807,23 +934,71 @@ export default function CalendarPage() {
   const renderSidebarContent = () => (
     <>
         {/* Filtros de Profesionales */}
-        <div>
+        <div className="mb-2">
           <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant">
+            <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant flex items-center gap-1 cursor-pointer select-none" onClick={() => setIsProfessionalsExpanded(!isProfessionalsExpanded)}>
               Profesionales
+              <span className="material-symbols-outlined text-[18px]">{isProfessionalsExpanded ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}</span>
+            </h3>
+          </div>
+
+          {isProfessionalsExpanded && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+              {professionals.map((prof) => (
+                <label key={prof.id} className="flex items-center gap-3 px-2 py-1.5 hover:bg-surface-container-low rounded-lg cursor-pointer transition-colors">
+                  <input type="checkbox" className="w-4 h-4 rounded text-primary border-outline focus:ring-primary" defaultChecked />
+                  <span className="font-body-sm text-sm text-on-surface">{prof.name}</span>
+                </label>
+              ))}
+              {professionals.length === 0 && (
+                <div className="text-xs text-on-surface-variant px-2">Cargando profesionales...</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Categorías de Prestación */}
+        <div className="mt-2">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant flex items-center gap-1 cursor-pointer select-none" onClick={() => setIsServicesExpanded(!isServicesExpanded)}>
+              Prestaciones
+              <span className="material-symbols-outlined text-[18px]">{isServicesExpanded ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}</span>
             </h3>
             <button 
-              onClick={() => setIsAvailabilityModalOpen(!isAvailabilityModalOpen)}
-              className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors shadow-sm ${isAvailabilityModalOpen ? 'bg-primary text-white' : 'bg-surface-container hover:bg-surface-container-high text-on-surface-variant'}`}
-              title="Configurar Disponibilidad"
+              onClick={() => setIsServicesConfigOpen(true)}
+              className="w-6 h-6 rounded-full flex items-center justify-center transition-colors shadow-sm bg-surface-container hover:bg-surface-container-high text-on-surface-variant"
+              title="Configurar Prestaciones"
             >
               <span className="material-symbols-outlined text-[14px]">settings</span>
             </button>
           </div>
+          
+          {isServicesExpanded && (
+            <div className="space-y-2 mb-3 animate-in fade-in slide-in-from-top-2">
+              {services.map((srv) => (
+                <div key={srv.name} className="flex items-center justify-between group px-2 py-1 hover:bg-surface-container-low rounded-lg transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${srv.color}`}></div>
+                    <span className="font-body-sm text-sm text-on-surface">{srv.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Horarios No Hábiles */}
+        <div className="mt-2 border-t border-outline-variant/50 pt-4">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="font-label-lg text-[13px] font-bold text-on-surface-variant flex items-center gap-1 cursor-pointer select-none" onClick={() => setIsAvailabilityModalOpen(!isAvailabilityModalOpen)}>
+              Configurar horarios (no hábiles)
+              <span className="material-symbols-outlined text-[18px]">{isAvailabilityModalOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}</span>
+            </h3>
+          </div>
 
           {isAvailabilityModalOpen && (
             <div className="mb-4 bg-surface-container-lowest border border-outline-variant rounded-xl p-3 shadow-sm animate-in fade-in slide-in-from-top-2">
-              <h4 className="text-xs font-bold text-on-surface mb-2">Horarios No Hábiles</h4>
+              <h4 className="text-xs font-bold text-on-surface mb-2">Bloqueos actuales</h4>
               
               <div className="space-y-2 max-h-32 overflow-y-auto mb-3">
                 {unavailabilities.length === 0 ? (
@@ -893,54 +1068,135 @@ export default function CalendarPage() {
               </form>
             </div>
           )}
-
-          <div className="space-y-2">
-            {professionals.map((prof) => (
-              <label key={prof.id} className="flex items-center gap-3 px-2 py-1.5 hover:bg-surface-container-low rounded-lg cursor-pointer transition-colors">
-                <input type="checkbox" className="w-4 h-4 rounded text-primary border-outline focus:ring-primary" defaultChecked />
-                <span className="font-body-sm text-sm text-on-surface">{prof.name}</span>
-              </label>
-            ))}
-            {professionals.length === 0 && (
-              <div className="text-xs text-on-surface-variant px-2">Cargando profesionales...</div>
-            )}
-          </div>
         </div>
 
-        {/* Categorías de Prestación */}
-        <div>
-          <h3 className="font-label-lg text-label-lg font-bold text-on-surface-variant mb-3 px-1 flex items-center justify-between">
-            Prestaciones
-            <span className="material-symbols-outlined text-[18px] cursor-pointer">keyboard_arrow_down</span>
-          </h3>
-          <div className="space-y-2 mb-3">
-            {services.map((srv) => (
-              <div key={srv.name} className="flex items-center justify-between group px-2 py-1 hover:bg-surface-container-low rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${srv.color}`}></div>
-                  <span className="font-body-sm text-sm text-on-surface">{srv.name}</span>
-                </div>
-                <button 
-                  onClick={() => handleDeleteService(srv.name)}
-                  className="opacity-0 group-hover:opacity-100 text-error hover:bg-error/10 w-6 h-6 rounded-full flex items-center justify-center transition-all"
-                >
-                  <span className="material-symbols-outlined text-[14px]">delete</span>
-                </button>
-              </div>
-            ))}
+        {/* Guardias */}
+        <div className="mt-2 border-t border-outline-variant/50 pt-4">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h3 className="font-label-lg text-[13px] font-bold text-on-surface-variant flex items-center gap-1 cursor-pointer select-none" onClick={() => setIsGuardiasModalOpen(!isGuardiasModalOpen)}>
+              Configurar Guardias
+              <span className="material-symbols-outlined text-[18px]">{isGuardiasModalOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}</span>
+            </h3>
           </div>
-          <form onSubmit={handleAddService} className="flex items-center gap-2 px-1">
-            <input 
-              type="text" 
-              value={newServiceName}
-              onChange={(e) => setNewServiceName(e.target.value)}
-              placeholder="Nueva prestación..."
-              className="flex-1 bg-surface border border-outline-variant rounded-lg px-2 py-1 text-xs outline-none focus:border-primary transition-colors"
-            />
-            <button type="submit" className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors">
-              <span className="material-symbols-outlined text-[16px]">add</span>
-            </button>
-          </form>
+
+          {isGuardiasModalOpen && (
+            <div className="mb-4 bg-[#FDE68A]/30 border border-[#F59E0B]/50 rounded-xl p-3 shadow-sm animate-in fade-in slide-in-from-top-2">
+              <h4 className="text-xs font-bold text-[#D97706] mb-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[16px]">health_and_safety</span> Guardias
+              </h4>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const date = (form.elements.namedItem('date') as HTMLInputElement).value;
+                const start = (form.elements.namedItem('start') as HTMLInputElement).value;
+                const end = (form.elements.namedItem('end') as HTMLInputElement).value;
+                const profId = (form.elements.namedItem('prof') as HTMLSelectElement).value;
+                
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+
+                const startHour = parseInt(start.split(':')[0]);
+                const endHour = parseInt(end.split(':')[0]);
+                
+                const isOvernight = startHour > endHour || (startHour === endHour && parseInt(start.split(':')[1]) >= parseInt(end.split(':')[1]));
+
+                // Handle patient_id required constraint by creating/finding a generic GUARDIA patient
+                let guardiaPatientId = null;
+                const { data: existingPatient } = await supabase.from('patients').select('id').eq('first_name', 'GUARDIA').limit(1).maybeSingle();
+                
+                if (existingPatient) {
+                  guardiaPatientId = existingPatient.id;
+                } else {
+                  const { data: newPatient, error: newPatientError } = await supabase.from('patients').insert({
+                    first_name: 'GUARDIA',
+                    last_name: 'INTERNA',
+                    phone: '00000000',
+                    user_id: user.id
+                  }).select('id').single();
+                  
+                  if (!newPatientError && newPatient) {
+                    guardiaPatientId = newPatient.id;
+                  }
+                }
+
+                let inserts = [];
+
+                if (isOvernight) {
+                  // Guardia cruzando la medianoche (madrugada)
+                  inserts.push({
+                    user_id: user.id,
+                    professional_id: profId,
+                    patient_id: guardiaPatientId,
+                    date: date,
+                    start_time: `${start}:00`,
+                    end_time: `23:59:00`,
+                    service_type: 'GUARDIA',
+                    status: 'Scheduled'
+                  });
+                  
+                  const parts = date.split('-');
+                  const nextDay = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+                  nextDay.setDate(nextDay.getDate() + 1);
+                  const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+                  
+                  inserts.push({
+                    user_id: user.id,
+                    professional_id: profId,
+                    patient_id: guardiaPatientId,
+                    date: nextDayStr,
+                    start_time: `00:00:00`,
+                    end_time: `${end}:00`,
+                    service_type: 'GUARDIA',
+                    status: 'Scheduled'
+                  });
+                } else {
+                  inserts.push({
+                    user_id: user.id,
+                    professional_id: profId,
+                    patient_id: guardiaPatientId,
+                    date: date,
+                    start_time: `${start}:00`,
+                    end_time: `${end}:00`,
+                    service_type: 'GUARDIA',
+                    status: 'Scheduled'
+                  });
+                }
+
+                const { error } = await supabase.from('appointments').insert(inserts);
+
+                if (error) {
+                  showAlert("Error al guardar guardia: " + error.message, "Error");
+                } else {
+                  showToast("Guardia registrada exitosamente", "success");
+                  form.reset();
+                  fetchCalendarData();
+                }
+              }} className="flex flex-col gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-[#D97706] mb-0.5">Profesional</label>
+                  <select name="prof" className="w-full bg-surface border border-[#F59E0B]/30 rounded-md py-1 px-1 text-[10px]" required>
+                    {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-[#D97706] mb-0.5">Fecha</label>
+                  <input type="date" name="date" required className="w-full bg-surface border border-[#F59E0B]/30 rounded-md py-1 px-1 text-[10px]" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-[#D97706] mb-0.5">Inicio - Fin</label>
+                  <div className="flex items-center gap-1">
+                    <input type="time" name="start" required defaultValue="17:00" className="w-full bg-surface border border-[#F59E0B]/30 rounded-md py-1 px-1 text-[10px]" />
+                    <span className="text-[10px] text-[#D97706]">-</span>
+                    <input type="time" name="end" required defaultValue="08:00" className="w-full bg-surface border border-[#F59E0B]/30 rounded-md py-1 px-1 text-[10px]" />
+                  </div>
+                  <p className="text-[8px] text-[#D97706]/70 mt-0.5">*Si cruza la medianoche se dividirá automáticamente en dos días.</p>
+                </div>
+                <button type="submit" className="mt-1 bg-[#F59E0B] text-white w-full py-1.5 rounded-md flex items-center justify-center hover:bg-[#D97706] shadow-sm text-[10px] font-bold">
+                  Registrar Guardia
+                </button>
+              </form>
+            </div>
+          )}
         </div>
     </>
   );
@@ -1069,6 +1325,13 @@ export default function CalendarPage() {
       </Portal>
     )}
 
+    {/* Modal de Configuración de Prestaciones */}
+    <ServicesConfigModal 
+      isOpen={isServicesConfigOpen} 
+      onClose={() => setIsServicesConfigOpen(false)} 
+      services={services} 
+    />
+
       {/* Modal de Detalle de Cita */}
       {selectedAppointment && (
         <Portal>
@@ -1104,21 +1367,22 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <button type="button" onClick={() => handleAttendance('asistio')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-[#34D399]/20 text-[#10B981] hover:bg-[#34D399]/30 transition-colors border border-[#34D399]/30 flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">check_circle</span> Asistió
-              </button>
-              <button type="button" onClick={() => handleAttendance('ausente')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-error/10 text-error hover:bg-error/20 transition-colors border border-error/20 flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">cancel</span> Ausente
-              </button>
-            </div>
+            {selectedAppointment.title !== 'GUARDIA' && (
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <button type="button" onClick={() => handleAttendance('asistio')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-[#34D399]/20 text-[#10B981] hover:bg-[#34D399]/30 transition-colors border border-[#34D399]/30 flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">check_circle</span> Asistió
+                </button>
+                <button type="button" onClick={() => handleAttendance('ausente')} className="py-2.5 px-4 rounded-xl font-label-sm text-sm bg-error/10 text-error hover:bg-error/20 transition-colors border border-error/20 flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">cancel</span> Ausente
+                </button>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button 
                 onClick={() => {
+                  setAppointmentToEdit(selectedAppointment);
                   setSelectedAppointment(null);
-                  setIsNewAppointmentModalOpen(true);
-                  // Notamos que no se puede editar directamente sin más trabajo, así que abrimos el modal para reagendar por ahora
                 }}
                 className="flex-1 py-3 px-2 rounded-xl font-label-sm text-xs bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors flex flex-col items-center justify-center gap-1"
               >
@@ -1128,8 +1392,8 @@ export default function CalendarPage() {
                 onClick={() => {
                   setAlertDialog({
                     isOpen: true,
-                    title: 'Borrar Turno',
-                    message: '¿Estás seguro de que deseas eliminar este turno?',
+                    title: selectedAppointment.title === 'GUARDIA' ? 'Borrar Guardia' : 'Borrar Turno',
+                    message: selectedAppointment.title === 'GUARDIA' ? '¿Estás seguro de que deseas eliminar esta guardia?' : '¿Estás seguro de que deseas eliminar este turno?',
                     type: 'confirm',
                     confirmText: 'Borrar',
                     onConfirm: async () => {
@@ -1150,12 +1414,14 @@ export default function CalendarPage() {
               >
                 <span className="material-symbols-outlined text-[20px]">delete</span> Borrar
               </button>
-              <Link 
-                href={`/patients/${selectedAppointment.patient_id}`}
-                className="flex-[2] py-3 px-4 rounded-xl font-label-sm text-sm bg-primary hover:bg-primary/90 text-on-primary transition-colors shadow-sm flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">medical_information</span> Historia Clínica
-              </Link>
+              {selectedAppointment.title !== 'GUARDIA' && (
+                <Link 
+                  href={`/patients/${selectedAppointment.patient_id}`}
+                  className="flex-[2] py-3 px-4 rounded-xl font-label-sm text-sm bg-primary hover:bg-primary/90 text-on-primary transition-colors shadow-sm flex items-center justify-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[18px]">medical_information</span> Historia Clínica
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -1163,13 +1429,21 @@ export default function CalendarPage() {
       )}
 
       <NewAppointmentModal 
-        isOpen={isNewAppointmentModalOpen}
+        isOpen={isNewAppointmentModalOpen || !!appointmentToEdit}
+        appointmentToEdit={appointmentToEdit}
+        initialTime={selectedTimeForNew}
         services={services}
-        onClose={() => setIsNewAppointmentModalOpen(false)}
+        onClose={() => {
+          setIsNewAppointmentModalOpen(false);
+          setAppointmentToEdit(null);
+          setSelectedTimeForNew(undefined);
+        }}
         onSuccess={() => {
           setIsNewAppointmentModalOpen(false);
+          setAppointmentToEdit(null);
+          setSelectedTimeForNew(undefined);
           fetchCalendarData();
-          showToast('Turno agendado exitosamente.', 'success');
+          showToast('Turno guardado exitosamente.', 'success');
         }}
       />
 
