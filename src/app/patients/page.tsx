@@ -72,7 +72,6 @@ export default function PatientsPage() {
       const { data, error } = await supabase
         .from('patients')
         .select('id, first_name, last_name, document_id, phone, email, created_at, insurance_id')
-        .neq('id', '1')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -83,7 +82,11 @@ export default function PatientsPage() {
       if (!data || data.length === 0) {
         setPatients([]);
       } else {
-        setPatients(data);
+        const filteredData = data.filter((p: any) => 
+          !(p.first_name === 'GUARDIA' && p.last_name === 'INTERNA') &&
+          !(p.first_name === 'GUARDIA INTERNA')
+        );
+        setPatients(filteredData);
       }
     } catch (err: any) {
       console.error('Error fetching patients (Detailed):', err.message, err.details);
