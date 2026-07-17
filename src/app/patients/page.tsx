@@ -173,14 +173,17 @@ export default function PatientsPage() {
       return;
     }
 
+    const payload: any = { ...formData, user_id: user.id };
+    if (!payload.insurance_id) {
+      payload.insurance_id = null;
+    }
+    if (!payload.birth_date) {
+      payload.birth_date = null;
+    }
+
     const { data, error } = await supabase
       .from('patients')
-      .insert([
-        { 
-          ...formData,
-          user_id: user.id
-        }
-      ])
+      .insert([payload])
       .select();
 
     if (error) {
