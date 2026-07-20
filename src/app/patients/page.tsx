@@ -67,7 +67,9 @@ export default function PatientsPage() {
     dental_trauma: '',
     functional_difficulties: '',
     treatment_plan: '',
-    insurance_id: ''
+    insurance_id: '',
+    secondary_insurance_id: '',
+    condition: ''
   });
 
   const fetchPatients = async () => {
@@ -177,6 +179,9 @@ export default function PatientsPage() {
     if (!payload.insurance_id) {
       payload.insurance_id = null;
     }
+    if (!payload.secondary_insurance_id) {
+      payload.secondary_insurance_id = null;
+    }
     if (!payload.birth_date) {
       payload.birth_date = null;
     }
@@ -194,7 +199,7 @@ export default function PatientsPage() {
       setFormData({
         first_name: '', last_name: '', document_id: '', phone: '', email: '', birth_date: '', blood_type: '', allergies: '',
         affiliate_number: '', address: '', occupation: '', medical_treatments: '', systemic_diseases: '', infectious_diseases: '',
-        specific_conditions: '', surgeries: '', habits: '', main_complaint: '', pain_history: '', dental_trauma: '', functional_difficulties: '', treatment_plan: '', insurance_id: ''
+        specific_conditions: '', surgeries: '', habits: '', main_complaint: '', pain_history: '', dental_trauma: '', functional_difficulties: '', treatment_plan: '', insurance_id: '', secondary_insurance_id: '', condition: ''
       });
       fetchPatients();
     }
@@ -239,7 +244,7 @@ export default function PatientsPage() {
     <div className="flex flex-col h-auto min-h-full w-full bg-surface">
       
       {/* Header & Search */}
-      <div className="p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-6 md:p-8 md:pr-24 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-on-surface tracking-tight">Pacientes</h1>
           <p className="text-on-surface-variant mt-1">Gestión del directorio de pacientes y sus historias clínicas.</p>
@@ -308,7 +313,7 @@ export default function PatientsPage() {
                 <tr>
                   <th className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                     <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-primary transition-colors">
-                      Nombre {getSortIcon('name')}
+                      Apellido y Nombre {getSortIcon('name')}
                     </button>
                   </th>
                   <th className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
@@ -354,7 +359,7 @@ export default function PatientsPage() {
                       {/* Name & Alerts */}
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-on-surface text-sm">{patient.first_name} {patient.last_name}</p>
+                          <p className="font-bold text-on-surface text-sm">{patient.last_name}, {patient.first_name}</p>
                           {(patient.allergies || patient.systemic_diseases || patient.infectious_diseases || patient.medical_treatments) && (
                             <span 
                               title="Alerta Médica (Alergias, Enfermedad o Medicación)" 
@@ -412,10 +417,10 @@ export default function PatientsPage() {
                       {/* Última Visita */}
                       <td className="py-4 px-6 text-sm text-on-surface-variant text-right">
                         <div className="flex items-center justify-end gap-3">
-                          <span className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary font-bold text-[11px] tracking-wider uppercase bg-primary/10 px-2 py-1 rounded-md hidden md:block">Abrir Ficha</span>
+                          <span className="text-primary font-bold text-[11px] tracking-wider uppercase bg-primary/10 px-2 py-1 rounded-md hidden md:block">Abrir Ficha</span>
                           <button 
                             onClick={(e) => handleDeletePatient(e, patient.id)}
-                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-error/10 hover:bg-error/20 text-error p-1.5 rounded-lg flex items-center justify-center shrink-0"
+                            className="bg-error/10 hover:bg-error/20 text-error p-1.5 rounded-lg flex items-center justify-center shrink-0"
                             title="Eliminar Paciente"
                           >
                             <span className="material-symbols-outlined text-[18px]">delete</span>
@@ -562,30 +567,73 @@ export default function PatientsPage() {
                       <input name="address" value={formData.address} onChange={handleInputChange} type="text" className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Calle, Número, Barrio, Localidad" />
                     </div>
 
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-on-surface-variant">Profesión / Actividad</label>
+                          <input name="occupation" value={formData.occupation} onChange={handleInputChange} type="text" className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Ej. Docente" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-outline-variant/30" />
+
+                  {/* 1.5. Datos Administrativos y Cobertura */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 sm:p-5">
+                    <h3 className="text-sm font-bold text-primary mb-4 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                      Datos Administrativos y Cobertura
+                    </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-on-surface-variant">Obra Social / Cobertura</label>
-                        <select name="insurance_id" value={formData.insurance_id} onChange={handleInputChange} className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors appearance-none">
-                          <option value="">Particular / Sin Cobertura</option>
-                          {insurances.map(os => (
-                            <option key={os.id} value={os.id}>{os.name}</option>
-                          ))}
-                        </select>
+                      <div>
+                        <label className="text-xs font-bold text-on-surface-variant mb-1 uppercase tracking-wider block">Obra Social Primaria</label>
+                        <div className="relative">
+                          <select 
+                            name="insurance_id"
+                            value={formData.insurance_id} 
+                            onChange={handleInputChange} 
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">Particular (Sin Obra Social)</option>
+                            {insurances.map(ins => (
+                              <option key={ins.id} value={ins.id}>{ins.name}</option>
+                            ))}
+                          </select>
+                          <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-on-surface-variant mb-1 uppercase tracking-wider block">Segunda Obra Social</label>
+                        <div className="relative">
+                          <select 
+                            name="secondary_insurance_id"
+                            value={formData.secondary_insurance_id} 
+                            onChange={handleInputChange} 
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">Ninguna</option>
+                            {insurances.map(ins => (
+                              <option key={ins.id} value={ins.id}>{ins.name}</option>
+                            ))}
+                          </select>
+                          <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-on-surface-variant">Nº Afiliado (Obra Social)</label>
                         <input name="affiliate_number" value={formData.affiliate_number} onChange={handleInputChange} type="text" className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Ej. 12345678" />
                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-on-surface-variant">Profesión / Actividad</label>
-                        <input name="occupation" value={formData.occupation} onChange={handleInputChange} type="text" className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Ej. Docente" />
+                        <label className="text-xs font-bold text-on-surface-variant">Condición</label>
+                        <select name="condition" value={formData.condition} onChange={handleInputChange} className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors">
+                          <option value="">Sin especificar</option>
+                          <option value="Grabado voluntario">Grabado voluntario</option>
+                          <option value="No voluntario exento">No voluntario exento</option>
+                        </select>
                       </div>
                     </div>
                   </div>
-                </div>
+
 
                 <hr className="border-outline-variant/30" />
                 

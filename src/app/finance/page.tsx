@@ -290,7 +290,7 @@ export default function FinancesPage() {
     <div className="flex-1 flex flex-col h-auto min-h-full bg-surface animate-in fade-in duration-150">
       
       {/* Top Header */}
-      <div className="flex-shrink-0 px-4 md:px-8 py-6 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-container-lowest/50 backdrop-blur-md relative z-20">
+      <div className="flex-shrink-0 px-4 md:pl-8 md:pr-28 py-6 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-container-lowest/50 backdrop-blur-md relative z-20">
         <div>
           <h1 className="text-3xl font-bold text-on-surface tracking-tight mb-1">Finanzas</h1>
           <p className="text-sm font-medium text-on-surface-variant capitalize">{todayStr}</p>

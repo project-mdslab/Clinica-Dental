@@ -266,7 +266,7 @@ export default function PricingPage() {
 
   return (
     <div className="flex flex-col h-full w-full bg-surface">
-      <div className="p-6 sm:px-10 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-6 sm:px-10 md:pr-28 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-on-surface">Aranceles y Obras Sociales</h1>
           <p className="text-on-surface-variant text-sm mt-1">Nomenclador Oficial y Precios de Coberturas</p>

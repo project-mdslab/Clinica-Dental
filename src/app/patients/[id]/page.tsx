@@ -114,9 +114,13 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
     }
     setSavingData(true);
     try {
+      const payload = { ...editForm, updated_at: new Date().toISOString() };
+      if (payload.insurance_id === '') payload.insurance_id = null;
+      if (payload.secondary_insurance_id === '') payload.secondary_insurance_id = null;
+
       const { error } = await supabase
         .from('patients')
-        .update({ ...editForm, updated_at: new Date().toISOString() })
+        .update(payload)
         .eq('id', id);
         
       if (error) throw error;
@@ -385,9 +389,23 @@ export default function PatientDetail({ params }: { params: Promise<{ id: string
             {renderEditableField({ label: "Correo Electrónico", field: "email", type: "email" })}
             {renderEditableField({ label: "Fecha de Nacimiento", field: "birth_date", type: "text" })}
             {renderEditableField({ label: "Grupo Sanguíneo", field: "blood_type" })}
-            {renderEditableField({ label: "Obra Social", field: "insurance_id", isSelect: true, options: [{value: '', label: 'Particular'}, ...insurances.map(i => ({value: i.id, label: i.name}))] })}
-            {renderEditableField({ label: "Número de Afiliado (Obra Social)", field: "affiliate_number" })}
-            <div className="hidden md:block"></div>
+            </div>
+            
+            {/* Sección de Obra Social y Administrativa */}
+            <div className="col-span-1 md:col-span-2 bg-primary/5 border border-primary/20 rounded-2xl p-4 sm:p-5 mt-2">
+              <h3 className="text-sm font-bold text-primary mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                Datos Administrativos y Cobertura
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderEditableField({ label: "Obra Social Primaria", field: "insurance_id", isSelect: true, options: [{value: '', label: 'Particular'}, ...insurances.map(i => ({value: i.id, label: i.name}))] })}
+                {renderEditableField({ label: "Segunda Obra Social", field: "secondary_insurance_id", isSelect: true, options: [{value: '', label: 'Ninguna'}, ...insurances.map(i => ({value: i.id, label: i.name}))] })}
+                {renderEditableField({ label: "Número de Afiliado (Obra Social)", field: "affiliate_number" })}
+                {renderEditableField({ label: "Condición", field: "condition", isSelect: true, options: [{value: '', label: 'Sin especificar'}, {value: 'Grabado voluntario', label: 'Grabado voluntario'}, {value: 'No voluntario exento', label: 'No voluntario exento'}] })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 col-span-1 md:col-span-2 mt-2">
             {renderEditableField({ label: "Dirección", field: "address", isTextArea: true })}
             {renderEditableField({ label: "Ocupación", field: "occupation", isTextArea: true })}
           </div>
