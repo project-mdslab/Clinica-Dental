@@ -70,14 +70,15 @@ export default function PricingPage() {
     const initialProgresses = Array.from(files).map(f => ({
       name: f.name.replace(/\.[^/.]+$/, "").toUpperCase(),
       progress: 0,
-      status: 'pending' as const
+      status: 'pending' as const,
+      errorMsg: ''
     }));
     setFileProgresses(initialProgresses);
 
-    const updateFileProgress = (idx: number, progress: number, status: 'pending'|'processing'|'completed'|'error') => {
+    const updateFileProgress = (idx: number, progress: number, status: 'pending'|'processing'|'completed'|'error', errorMsg: string = '') => {
       setFileProgresses(prev => {
         const newArr = [...prev];
-        newArr[idx] = { ...newArr[idx], progress, status };
+        newArr[idx] = { ...newArr[idx], progress, status, errorMsg };
         return newArr;
       });
     };
@@ -352,7 +353,7 @@ export default function PricingPage() {
           }
         } catch (err: any) {
           console.error("Error loading file", file.name, err);
-          updateFileProgress(fileIndex, 100, 'error');
+          updateFileProgress(fileIndex, 100, 'error', err.message || 'Error desconocido');
           resolve();
         }
       });
@@ -419,22 +420,29 @@ export default function PricingPage() {
             </div>
             <div className="max-h-[60vh] overflow-y-auto p-2">
               {fileProgresses.map((fp, i) => (
-                <div key={i} className="flex items-center justify-between p-4 border-b border-outline-variant/10 last:border-0">
-                  <div className="flex flex-col w-full pr-4">
-                    <span className="text-sm font-bold text-on-surface truncate">{fp.name}</span>
-                    <div className="w-full bg-surface-container-high rounded-full h-1.5 mt-2">
-                      <div 
-                        className={`h-1.5 rounded-full transition-all duration-300 ${fp.status === 'error' ? 'bg-error' : fp.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`} 
-                        style={{ width: `${fp.progress}%` }}
-                      ></div>
+                <div key={i} className="flex flex-col border-b border-outline-variant/10 last:border-0">
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex flex-col w-full pr-4">
+                      <span className="text-sm font-bold text-on-surface truncate">{fp.name}</span>
+                      <div className="w-full bg-surface-container-high rounded-full h-1.5 mt-2">
+                        <div 
+                          className={`h-1.5 rounded-full transition-all duration-300 ${fp.status === 'error' ? 'bg-error' : fp.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`} 
+                          style={{ width: `${fp.progress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {fp.status === 'pending' && <span className="material-symbols-outlined text-on-surface-variant/50 text-[20px]">schedule</span>}
+                      {fp.status === 'processing' && <span className="material-symbols-outlined text-primary text-[20px] animate-spin">refresh</span>}
+                      {fp.status === 'completed' && <span className="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>}
+                      {fp.status === 'error' && <span className="material-symbols-outlined text-error text-[20px]">error</span>}
                     </div>
                   </div>
-                  <div className="flex-shrink-0">
-                    {fp.status === 'pending' && <span className="material-symbols-outlined text-on-surface-variant/50 text-[20px]">schedule</span>}
-                    {fp.status === 'processing' && <span className="material-symbols-outlined text-primary text-[20px] animate-spin">refresh</span>}
-                    {fp.status === 'completed' && <span className="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>}
-                    {fp.status === 'error' && <span className="material-symbols-outlined text-error text-[20px]">error</span>}
-                  </div>
+                  {fp.status === 'error' && fp.errorMsg && (
+                    <div className="px-4 pb-4 text-xs text-error font-medium">
+                      {fp.errorMsg}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

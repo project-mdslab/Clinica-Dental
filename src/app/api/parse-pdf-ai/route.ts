@@ -43,7 +43,7 @@ No incluyas nada más en tu respuesta que el JSON puro, sin bloques markdown de 
             {
                 inlineData: {
                     data: base64Data,
-                    mimeType: file.type || 'application/pdf',
+                    mimeType: 'application/pdf',
                 }
             }
         ],
