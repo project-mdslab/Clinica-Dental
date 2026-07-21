@@ -114,11 +114,16 @@ export default function PatientsPage() {
     fetchInsurances();
   }, []);
 
+  const normalizeText = (text: string) => {
+    if (!text) return '';
+    return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  };
+
   const filteredPatients = patients.filter(p => {
-    const term = search.toLowerCase();
+    const term = normalizeText(search);
     return (
-      p.first_name.toLowerCase().includes(term) ||
-      p.last_name.toLowerCase().includes(term) ||
+      normalizeText(p.first_name).includes(term) ||
+      normalizeText(p.last_name).includes(term) ||
       (p.document_id && p.document_id.includes(term))
     );
   }).sort((a, b) => {

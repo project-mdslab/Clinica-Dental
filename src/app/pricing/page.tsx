@@ -14,6 +14,7 @@ export default function PricingPage() {
   
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [fileProgresses, setFileProgresses] = useState<{name: string, progress: number, status: 'pending'|'processing'|'completed'|'error'}[]>([]);
   const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert' as 'alert' | 'confirm', onConfirm: () => {}, confirmText: 'Aceptar' });
 
   const showAlert = (message: string, title?: string) => {
@@ -60,66 +61,93 @@ export default function PricingPage() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(0);
+    
+    const initialProgresses = Array.from(files).map(f => ({
+      name: f.name.replace(/\.[^/.]+$/, "").toUpperCase(),
+      progress: 0,
+      status: 'pending' as const
+    }));
+    setFileProgresses(initialProgresses);
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+    const updateFileProgress = (idx: number, progress: number, status: 'pending'|'processing'|'completed'|'error') => {
+      setFileProgresses(prev => {
+        const newArr = [...prev];
+        newArr[idx] = { ...newArr[idx], progress, status };
+        return newArr;
+      });
+    };
+
+    const officialMapping: Record<string, string> = {
+      'AMERICA': 'AMERICA SERVICIOS',
+      'AMSTERDAM': 'AMSTERDAM',
+      'SAN PEDRO': 'ASOC. ECLESIASTICA DE SAN PEDRO',
+      'JERARQUICOS': 'JERARQUICOS SALUD',
+      'AMUPRO': 'ASOCIACION MUTUAL DE PROFESIONALES (AMUPRO)',
+      'AMUR': 'ASOCIACION MUTUAL RURALISTA (AMUR)',
+      'SANCOR': 'SANCOR MEDICINA PRIVADA',
+      'ASSISTRAVEL': 'ASSISTRAVEL',
+      'AVALIAN': 'AVALIAN - ACA SALUD',
+      'ACA SALUD': 'AVALIAN - ACA SALUD',
+      'CAJA NOTARIAL': 'CAJA NOTARIAL DE ENTRE RIOS',
+      'CSFA': 'CIRCULO SUBOFICIALES FUERZA AEREA',
+      'CS ECONOMICAS': 'CONSEJO PROF. CS. ECONOMICAS',
+      'FEDERADA': 'FEDERADA SALUD',
+      'GALENO': 'GALENO ARGENTINA',
+      'IAPSER': 'IAPSER',
+      'INTEGRAL': 'INTEGRAL SALUD',
+      'MEDICUS': 'MEDICUS SA',
+      'MEDIFE': 'MEDIFE',
+      'FUTBOLISTAS': 'OBRA SOCIAL DE FUTBOLISTAS',
+      'POLICIA': 'POLICIA FEDERAL',
+      'PODER JUDICIAL': 'PODER JUDICIAL DE LA NACION',
+      'OSSEG': 'OBRA SOCIAL DEL SEGURO (OSSEG)',
+      'OSSEG PROTESIS': 'OBRA SOCIAL DEL SEGURO - PROTESIS',
+      'PASTEUR': 'LUIS PASTEUR',
+      'OMINT': 'OMINT',
+      'OSPE': 'OSPE UNIMEDICA',
+      'PATRONES': 'PATRONES DE CABOTAJE',
+      'PREVENCION': 'PREVENCION SALUD',
+      'PROVINCIA': 'PROVINCIA ART',
+      'SADAIC': 'SADAIC',
+      'SANATORIO SANTA FE': 'SANATORIO SANTA FE',
+      'SSF': 'SANATORIO SANTA FE',
+      'SOS': 'SERVICIO ODONTOLOGICO SOLIDARIO',
+      'SMEBER': 'SMEBER',
+      'SWISS MEDICAL': 'SWISS MEDICAL & DOCTHOS'
+    };
+
+    const processFile = (file: File, fileIndex: number): Promise<void> => {
+      return new Promise(async (resolve, reject) => {
+        updateFileProgress(fileIndex, 10, 'processing');
         
-        const officialMapping: Record<string, string> = {
-          'AMERICA SERVICIOS (57)': 'AMERICA SERVICIOS',
-          'AMSTERDAM (60) ': 'AMSTERDAM',
-          ' SAN PEDRO (41)': 'ASOC. ECLESIASTICA DE SAN PEDRO',
-          'JERARQUICOS SALUD (49)': 'JERARQUICOS SALUD',
-          'amupro': 'ASOCIACION MUTUAL DE PROFESIONALES (AMUPRO)',
-          'AMUR (9) ': 'ASOCIACION MUTUAL RURALISTA (AMUR)',
-          'SANCOR (8)': 'SANCOR MEDICINA PRIVADA',
-          'ASSISTRAVEL (86) ': 'ASSISTRAVEL',
-          'ACA SALUD (73)': 'AVALIAN - ACA SALUD',
-          'CAJA NOTARIAL (54)': 'CAJA NOTARIAL DE ENTRE RIOS',
-          'C.S.F.A (89)': 'CIRCULO SUBOFICIALES FUERZA AEREA',
-          'CS ECONOMICAS (69)': 'CONSEJO PROF. CS. ECONOMICAS',
-          'FEDERADA SALUD (167)': 'FEDERADA SALUD',
-          'GALENO (46)': 'GALENO ARGENTINA',
-          'IAPSER (84)': 'IAPSER',
-          'INTEGRAL SALUD (12)': 'INTEGRAL SALUD',
-          'MEDICUS (112)': 'MEDICUS SA',
-          'MEDIFE (119)': 'MEDIFE',
-          'FUTBOLISTAS (19)': 'OBRA SOCIAL DE FUTBOLISTAS',
-          'POL.FEDERAL (139)': 'POLICIA FEDERAL',
-          'PODER JUDICIAL (26)': 'PODER JUDICIAL DE LA NACION',
-          'OSSEG (51-52)': 'OBRA SOCIAL DEL SEGURO (OSSEG)',
-          'OSSEG PROTESIS (50)': 'OBRA SOCIAL DEL SEGURO - PROTESIS',
-          'LUIS PASTEUR (91)': 'LUIS PASTEUR',
-          'OMINT (92)': 'OMINT',
-          'OSPE-UNIMEDICA (191)': 'OSPE UNIMEDICA',
-          'PATRONES (5)': 'PATRONES DE CABOTAJE',
-          'PREVENCION SALUD (179)': 'PREVENCION SALUD',
-          'PROVINCIA ART (71)': 'PROVINCIA ART',
-          'SADAIC (97)': 'SADAIC',
-          'SANATORIO SANTA FE': 'SANATORIO SANTA FE',
-          'S . O . S ': 'SERVICIO ODONTOLOGICO SOLIDARIO',
-          'SMEBER(18) ': 'SMEBER',
-          'SWISS MEDICAL (58) DOCTHOS (127': 'SWISS MEDICAL & DOCTHOS'
-        };
-
-        const validSheets = wb.SheetNames.filter(name => officialMapping[name]);
-
-        if (validSheets.length === 0) throw new Error("No se encontraron hojas válidas.");
+        let fileName = file.name.replace(/\.[^/.]+$/, "").toUpperCase();
+        let isColegio = fileName.includes('COLEGIO');
+        let osName = '';
         
-        let progress = 10;
-        const progressStep = 80 / validSheets.length;
+        if (!isColegio) {
+          for (const key of Object.keys(officialMapping)) {
+            if (fileName.includes(key)) {
+              osName = officialMapping[key];
+              break;
+            }
+          }
+        }
 
-        for (const sheetName of validSheets) {
-          const osName = officialMapping[sheetName];
+        if (!isColegio && !osName) {
+          console.warn(`Archivo ignorado, no se reconoce la obra social en el nombre: ${file.name}`);
+          updateFileProgress(fileIndex, 100, 'error');
+          return resolve();
+        }
 
-          let osId = null;
+        updateFileProgress(fileIndex, 30, 'processing');
+
+        let osId = null;
+        if (!isColegio) {
           const { data: existingOS } = await supabase.from('insurances').select('id').eq('name', osName).single();
           if (existingOS) {
             osId = existingOS.id;
@@ -127,22 +155,26 @@ export default function PricingPage() {
             const { data: newOS } = await supabase.from('insurances').insert({ name: osName }).select('id').single();
             if (newOS) osId = newOS.id;
           }
+          if (!osId) return resolve();
+        }
 
-          if (!osId) continue;
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
+        
+        const parseAndUpsert = async (rawData: any[][]) => {
+          updateFileProgress(fileIndex, 50, 'processing');
 
-          const ws = wb.Sheets[sheetName];
-          const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-          
           let modality = 'DESCONOCIDO';
-          for(let i=0; i<15 && i<rawData.length; i++){
-            const rowText = rawData[i].join(' ').toUpperCase();
-            if (rowText.includes('MODALIDAD')) {
-              if (rowText.includes('CARNET') && !rowText.includes('PRESUPUESTO') && !rowText.includes('AUTORIZACION')) {
-                modality = 'CARNET';
-              } else if ((rowText.includes('PRESUPUESTO') || rowText.includes('AUTORIZACION')) && !rowText.includes('CARNET')) {
-                modality = 'PRESUPUESTO';
-              } else if (rowText.includes('CARNET') && (rowText.includes('PRESUPUESTO') || rowText.includes('AUTORIZACION'))) {
-                modality = 'MIXTO';
+          if (!isColegio) {
+            for(let i=0; i<15 && i<rawData.length; i++){
+              const rowText = rawData[i].join(' ').toUpperCase();
+              if (rowText.includes('MODALIDAD')) {
+                if (rowText.includes('CARNET') && !rowText.includes('PRESUPUESTO') && !rowText.includes('AUTORIZACION')) {
+                  modality = 'CARNET';
+                } else if ((rowText.includes('PRESUPUESTO') || rowText.includes('AUTORIZACION')) && !rowText.includes('CARNET')) {
+                  modality = 'PRESUPUESTO';
+                } else if (rowText.includes('CARNET') && (rowText.includes('PRESUPUESTO') || rowText.includes('AUTORIZACION'))) {
+                  modality = 'MIXTO';
+                }
               }
             }
           }
@@ -156,7 +188,6 @@ export default function PricingPage() {
           for(let i=0; i<30 && i<rawData.length; i++){
             if (!rawData[i]) continue;
             
-            // Convert to a dense array of strings, normalized (no accents, no trailing spaces)
             const rowArr = [];
             for(let j=0; j<rawData[i].length; j++) {
               const cleanStr = (rawData[i][j] || '').toString().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -169,17 +200,17 @@ export default function PricingPage() {
                  const cell = rowArr[j];
                  if (cell.includes('ARANCEL') || cell.includes('PRECIO')) colArancel = j;
                  if (cell.includes('COSEGURO')) { colCopay = j; hasCopay = true; }
-                 if (cell.includes(osName.toUpperCase()) || cell.includes('COBERTURA') || cell.includes('CUBRE')) colCoverage = j;
+                 if (!isColegio && (cell.includes(osName.toUpperCase()) || cell.includes('COBERTURA') || cell.includes('CUBRE'))) colCoverage = j;
               }
               break;
             }
           }
 
-          await supabase.from('insurances').update({ has_copay: hasCopay, modality: modality }).eq('id', osId);
+          if (!isColegio) {
+            await supabase.from('insurances').update({ has_copay: hasCopay, modality: modality }).eq('id', osId);
+          }
           
           const startIdx = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
-          
-          // Usamos un Map para evitar duplicados en la misma hoja, lo que hace fallar el batch upsert en Postgres
           const uniqueRowsMap = new Map();
 
           for (let i = startIdx; i < rawData.length; i++) {
@@ -187,54 +218,165 @@ export default function PricingPage() {
             if (!row || row.length < 2) continue;
 
             const possibleCode = row[0]?.toString().trim();
-            const possibleName = row[1]?.toString().trim();
-            const totalArancel = parseFloat(row[colArancel]?.toString().replace(/[^0-9.-]+/g,"")) || 0;
-            const copayPrice = colCopay !== -1 ? (parseFloat(row[colCopay]?.toString().replace(/[^0-9.-]+/g,"")) || 0) : 0;
-            const coveragePrice = colCoverage !== -1 ? (parseFloat(row[colCoverage]?.toString().replace(/[^0-9.-]+/g,"")) || 0) : (totalArancel - copayPrice);
+            let possibleName = row[1]?.toString().trim();
+            // Handle edge case where name might be split into multiple columns in PDF
+            if (isPdf && row.length > 3) {
+                // If it's a PDF and there are many columns, sometimes the name is split
+                // We'll trust the logic for now, but if name is very short, maybe join it?
+                // For now, let's keep it simple.
+            }
 
-            if (possibleCode && possibleName && possibleName.length > 5 && totalArancel > 0) {
-              const uniqueKey = `${possibleCode}_${possibleName}`;
-              uniqueRowsMap.set(uniqueKey, {
-                insurance_id: osId,
-                code: possibleCode,
-                name: possibleName,
-                price: totalArancel,
-                coverage_price: coveragePrice,
-                copay_price: copayPrice
-              });
+            const totalArancel = parseFloat(row[colArancel]?.toString().replace(/[^0-9.-]+/g,"")) || 0;
+            
+            if (isColegio) {
+              if (possibleCode && possibleName && possibleName.length > 5 && totalArancel > 0) {
+                const uniqueKey = `${possibleCode}_${possibleName}`;
+                uniqueRowsMap.set(uniqueKey, {
+                  code: possibleCode,
+                  name: possibleName,
+                  price: totalArancel
+                });
+              }
+            } else {
+              const copayPrice = colCopay !== -1 ? (parseFloat(row[colCopay]?.toString().replace(/[^0-9.-]+/g,"")) || 0) : 0;
+              const coveragePrice = colCoverage !== -1 ? (parseFloat(row[colCoverage]?.toString().replace(/[^0-9.-]+/g,"")) || 0) : (totalArancel - copayPrice);
+
+              if (possibleCode && possibleName && possibleName.length > 5 && totalArancel > 0) {
+                const uniqueKey = `${possibleCode}_${possibleName}`;
+                uniqueRowsMap.set(uniqueKey, {
+                  insurance_id: osId,
+                  code: possibleCode,
+                  name: possibleName,
+                  price: totalArancel,
+                  coverage_price: coveragePrice,
+                  copay_price: copayPrice
+                });
+              }
             }
           }
 
           const rowsToInsert = Array.from(uniqueRowsMap.values());
 
-          // Batch insert para mejorar velocidad
           if (rowsToInsert.length > 0) {
             for (let k = 0; k < rowsToInsert.length; k += 500) {
               const chunk = rowsToInsert.slice(k, k + 500);
-              const { error } = await supabase.from('insurance_treatments').upsert(chunk, { onConflict: 'insurance_id, code, name' });
-              if (error) console.error("Error upserting chunk in", osName, error);
+              const tableName = isColegio ? 'treatments' : 'insurance_treatments';
+              const onConflict = isColegio ? 'code' : 'insurance_id, code, name';
+              const { error } = await supabase.from(tableName).upsert(chunk, { onConflict });
+              if (error) console.error("Error upserting chunk in", isColegio ? 'Colegio' : osName, error);
             }
           }
-          
-          progress += progressStep;
-          setUploadProgress(Math.round(progress));
+        };
+
+        try {
+          if (isPdf) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('osName', osName || 'COLEGIO');
+
+            const res = await fetch('/api/parse-pdf-ai', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const errorData = await res.json();
+              console.error('Error from AI parser:', errorData);
+              throw new Error(errorData.error || 'Error en la IA al procesar PDF');
+            }
+
+            const aiData = await res.json();
+            
+            if (!Array.isArray(aiData) || aiData.length === 0) {
+              throw new Error('La IA no pudo extraer datos del PDF.');
+            }
+
+            updateFileProgress(fileIndex, 70, 'processing');
+
+            const tableName = isColegio ? 'treatments' : 'insurance_treatments';
+            
+            const rowsToInsert = aiData.map((row: any) => {
+              if (isColegio) {
+                return {
+                  code: String(row.code).trim(),
+                  name: String(row.name).trim(),
+                  price: Number(row.price)
+                };
+              } else {
+                return {
+                  insurance_id: osId,
+                  code: String(row.code).trim(),
+                  name: String(row.name).trim(),
+                  price: Number(row.price),
+                  coverage_price: Number(row.coverage_price || row.price),
+                  copay_price: Number(row.copay_price || 0)
+                };
+              }
+            });
+
+            for (let k = 0; k < rowsToInsert.length; k += 500) {
+              const chunk = rowsToInsert.slice(k, k + 500);
+              const onConflict = isColegio ? 'code' : 'insurance_id, code, name';
+              const { error } = await supabase.from(tableName).upsert(chunk, { onConflict });
+              if (error) console.error("Error upserting chunk from AI", error);
+            }
+
+            updateFileProgress(fileIndex, 100, 'completed');
+            resolve();
+            
+          } else {
+            // Excel processing
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+              try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const sheetName = wb.SheetNames[0];
+                const ws = wb.Sheets[sheetName];
+                const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+                
+                await parseAndUpsert(rawData);
+                updateFileProgress(fileIndex, 100, 'completed');
+                resolve();
+              } catch (err: any) {
+                console.error("Error processing Excel", file.name, err);
+                updateFileProgress(fileIndex, 100, 'error');
+                resolve();
+              }
+            };
+            reader.onerror = () => {
+              updateFileProgress(fileIndex, 100, 'error');
+              resolve();
+            };
+            reader.readAsBinaryString(file);
+          }
+        } catch (err: any) {
+          console.error("Error loading file", file.name, err);
+          updateFileProgress(fileIndex, 100, 'error');
+          resolve();
         }
-
-        setUploadProgress(100);
-        setTimeout(() => {
-          setIsUploading(false);
-          setUploadProgress(0);
-          fetchInsurances();
-          fetchTreatments();
-          showAlert("Excel procesado con éxito.", "Éxito");
-        }, 1000);
-
-      } catch (err: any) {
-        showAlert("Error procesando Excel: " + err.message);
-        setIsUploading(false);
-      }
+      });
     };
-    reader.readAsBinaryString(file);
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await processFile(files[i], i);
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
+      }
+      
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setTimeout(() => setFileProgresses([]), 3000); // Hide modal after 3 seconds
+        fetchInsurances();
+        fetchTreatments();
+        showAlert("Archivos Excel procesados con éxito.", "Éxito");
+        if (e.target) e.target.value = '';
+      }, 1000);
+    } catch (err: any) {
+      showAlert("Error procesando archivos: " + err.message);
+      setIsUploading(false);
+    }
   };
 
   const filteredTreatments = treatments.filter(t => 
@@ -266,6 +408,50 @@ export default function PricingPage() {
 
   return (
     <div className="flex flex-col h-full w-full bg-surface">
+      {fileProgresses.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-container-lowest w-11/12 max-w-md min-w-[320px] rounded-3xl shadow-xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-6 border-b border-outline-variant/30">
+              <h3 className="text-xl font-bold text-on-surface">Procesando Archivos...</h3>
+              <p className="text-sm text-on-surface-variant mt-1">
+                {isUploading ? 'Actualizando base de datos' : 'Actualización completada'}
+              </p>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-2">
+              {fileProgresses.map((fp, i) => (
+                <div key={i} className="flex items-center justify-between p-4 border-b border-outline-variant/10 last:border-0">
+                  <div className="flex flex-col w-full pr-4">
+                    <span className="text-sm font-bold text-on-surface truncate">{fp.name}</span>
+                    <div className="w-full bg-surface-container-high rounded-full h-1.5 mt-2">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-300 ${fp.status === 'error' ? 'bg-error' : fp.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`} 
+                        style={{ width: `${fp.progress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {fp.status === 'pending' && <span className="material-symbols-outlined text-on-surface-variant/50 text-[20px]">schedule</span>}
+                    {fp.status === 'processing' && <span className="material-symbols-outlined text-primary text-[20px] animate-spin">refresh</span>}
+                    {fp.status === 'completed' && <span className="material-symbols-outlined text-green-500 text-[20px]">check_circle</span>}
+                    {fp.status === 'error' && <span className="material-symbols-outlined text-error text-[20px]">error</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!isUploading && (
+              <div className="p-4 bg-surface-container border-t border-outline-variant/30 flex justify-end">
+                <button 
+                  onClick={() => setFileProgresses([])}
+                  className="px-6 py-2 bg-primary text-on-primary font-bold rounded-xl text-sm"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="p-6 sm:px-10 md:pr-28 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-on-surface">Aranceles y Obras Sociales</h1>
@@ -284,7 +470,8 @@ export default function PricingPage() {
           <div className="relative">
             <input 
               type="file" 
-              accept=".xls,.xlsx" 
+              accept=".xls,.xlsx,.pdf" 
+              multiple
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               onChange={handleFileUpload}
               disabled={isUploading}
