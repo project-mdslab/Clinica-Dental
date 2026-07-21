@@ -119,7 +119,9 @@ export default function PricingPage() {
       'SSF': 'SANATORIO SANTA FE',
       'SOS': 'SERVICIO ODONTOLOGICO SOLIDARIO',
       'SMEBER': 'SMEBER',
-      'SWISS MEDICAL': 'SWISS MEDICAL & DOCTHOS'
+      'SWISS MEDICAL': 'SWISS MEDICAL & DOCTHOS',
+      'SAS': 'CONSEJO PROF. CS. ECONOMICAS',
+      'SAN PEDRO': 'ASOC. ECLESIASTICA DE SAN PEDRO - OBRA SOCIAL DEL CLERO'
     };
 
     const processFile = (file: File, fileIndex: number): Promise<void> => {
@@ -127,15 +129,20 @@ export default function PricingPage() {
         updateFileProgress(fileIndex, 10, 'processing');
         
         let fileName = file.name.replace(/\.[^/.]+$/, "").toUpperCase();
+        fileName = fileName.replace(/[-_]/g, ' ').trim(); // Replace hyphens and underscores with spaces
         let isColegio = fileName.includes('COLEGIO');
         let osName = '';
         
         if (!isColegio) {
-          for (const key of Object.keys(officialMapping)) {
+          const sortedKeys = Object.keys(officialMapping).sort((a, b) => b.length - a.length);
+          for (const key of sortedKeys) {
             if (fileName.includes(key)) {
               osName = officialMapping[key];
               break;
             }
+          }
+          if (!osName) {
+            osName = fileName; // Fallback to the filename if not in mapping
           }
         }
 
@@ -159,8 +166,6 @@ export default function PricingPage() {
           if (!osId) return resolve();
         }
 
-        const isPdf = file.name.toLowerCase().endsWith('.pdf');
-        
         const parseAndUpsert = async (rawData: any[][]) => {
           updateFileProgress(fileIndex, 50, 'processing');
 
@@ -221,11 +226,7 @@ export default function PricingPage() {
             const possibleCode = row[0]?.toString().trim();
             let possibleName = row[1]?.toString().trim();
             // Handle edge case where name might be split into multiple columns in PDF
-            if (isPdf && row.length > 3) {
-                // If it's a PDF and there are many columns, sometimes the name is split
-                // We'll trust the logic for now, but if name is very short, maybe join it?
-                // For now, let's keep it simple.
-            }
+            // isPdf was removed
 
             const totalArancel = parseFloat(row[colArancel]?.toString().replace(/[^0-9.-]+/g,"")) || 0;
             
@@ -270,87 +271,30 @@ export default function PricingPage() {
         };
 
         try {
-          if (isPdf) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('osName', osName || 'COLEGIO');
-
-            const res = await fetch('/api/parse-pdf-ai', {
-              method: 'POST',
-              body: formData,
-            });
-
-            if (!res.ok) {
-              const errorData = await res.json();
-              console.error('Error from AI parser:', errorData);
-              throw new Error(errorData.error || 'Error en la IA al procesar PDF');
-            }
-
-            const aiData = await res.json();
-            
-            if (!Array.isArray(aiData) || aiData.length === 0) {
-              throw new Error('La IA no pudo extraer datos del PDF.');
-            }
-
-            updateFileProgress(fileIndex, 70, 'processing');
-
-            const tableName = isColegio ? 'treatments' : 'insurance_treatments';
-            
-            const rowsToInsert = aiData.map((row: any) => {
-              if (isColegio) {
-                return {
-                  code: String(row.code).trim(),
-                  name: String(row.name).trim(),
-                  price: Number(row.price)
-                };
-              } else {
-                return {
-                  insurance_id: osId,
-                  code: String(row.code).trim(),
-                  name: String(row.name).trim(),
-                  price: Number(row.price),
-                  coverage_price: Number(row.coverage_price || row.price),
-                  copay_price: Number(row.copay_price || 0)
-                };
-              }
-            });
-
-            for (let k = 0; k < rowsToInsert.length; k += 500) {
-              const chunk = rowsToInsert.slice(k, k + 500);
-              const onConflict = isColegio ? 'code' : 'insurance_id, code, name';
-              const { error } = await supabase.from(tableName).upsert(chunk, { onConflict });
-              if (error) console.error("Error upserting chunk from AI", error);
-            }
-
-            updateFileProgress(fileIndex, 100, 'completed');
-            resolve();
-            
-          } else {
-            // Excel processing
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-              try {
-                const bstr = evt.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
-                const sheetName = wb.SheetNames[0];
-                const ws = wb.Sheets[sheetName];
-                const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-                
-                await parseAndUpsert(rawData);
-                updateFileProgress(fileIndex, 100, 'completed');
-                resolve();
-              } catch (err: any) {
-                console.error("Error processing Excel", file.name, err);
-                updateFileProgress(fileIndex, 100, 'error');
-                resolve();
-              }
-            };
-            reader.onerror = () => {
+          // Excel processing
+          const reader = new FileReader();
+          reader.onload = async (evt) => {
+            try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const sheetName = wb.SheetNames[0];
+              const ws = wb.Sheets[sheetName];
+              const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+              
+              await parseAndUpsert(rawData);
+              updateFileProgress(fileIndex, 100, 'completed');
+              resolve();
+            } catch (err: any) {
+              console.error("Error processing Excel", file.name, err);
               updateFileProgress(fileIndex, 100, 'error');
               resolve();
-            };
-            reader.readAsBinaryString(file);
-          }
+            }
+          };
+          reader.onerror = () => {
+            updateFileProgress(fileIndex, 100, 'error');
+            resolve();
+          };
+          reader.readAsBinaryString(file);
         } catch (err: any) {
           console.error("Error loading file", file.name, err);
           updateFileProgress(fileIndex, 100, 'error', err.message || 'Error desconocido');
@@ -368,7 +312,7 @@ export default function PricingPage() {
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
-        setTimeout(() => setFileProgresses([]), 3000); // Hide modal after 3 seconds
+        // Removed auto-hide so user can review the results manually
         fetchInsurances();
         fetchTreatments();
         showAlert("Archivos Excel procesados con éxito.", "Éxito");
@@ -478,7 +422,7 @@ export default function PricingPage() {
           <div className="relative">
             <input 
               type="file" 
-              accept=".xls,.xlsx,.pdf" 
+              accept=".xls,.xlsx" 
               multiple
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               onChange={handleFileUpload}
