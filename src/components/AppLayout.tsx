@@ -12,13 +12,11 @@ import { createClient } from '@/utils/supabase/client';
 export default function AppLayout({ children, role }: { children: React.ReactNode, role?: string }) {
   const pathname = usePathname();
   const isLoginRoute = pathname === '/login';
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Estados para la edición de perfil
-  const [profileName, setProfileName] = useState("Cargando...");
+  const [profileName, setProfileName] = useState("");
   const [profilePic, setProfilePic] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
+  const [profileColor, setProfileColor] = useState("");
 
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll, requestPermission, permissionGranted } = useNotifications();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -46,37 +44,28 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
 
   useEffect(() => {
     const loadProfile = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUserId(session.user.id);
-        const meta = session.user.user_metadata;
-        const fullName = meta?.first_name ? `${meta.first_name} ${meta.last_name || ''}`.trim() : '';
-        setProfileName(fullName);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const meta = user.user_metadata;
+        let finalName = '';
+        if (meta?.first_name) {
+          finalName = `${meta.first_name} ${meta.last_name || ''}`.trim();
+        } else if (meta?.full_name) {
+          finalName = meta.full_name;
+        } else if (meta?.name) {
+          finalName = meta.name;
+        }
+        setProfileName(finalName || "Usuario");
         if (meta?.avatar_url) setProfilePic(meta.avatar_url);
+        if (meta?.color) setProfileColor(meta.color);
+      } else {
+        setProfileName("Usuario");
       }
     };
     loadProfile();
   }, []);
 
-  const handleSaveProfile = async () => {
-    if (!userId) return;
-    try {
-      const names = profileName.split(' ');
-      const firstName = names[0];
-      const lastName = names.slice(1).join(' ');
-      
-      await supabase.auth.updateUser({
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-          avatar_url: profilePic
-        }
-      });
-      setIsProfileModalOpen(false);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+
 
   // Determinar color de avatar basado en el rol
   const getRoleColor = (r?: string) => {
@@ -99,9 +88,12 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
     { name: "Dashboard", href: "/", icon: "dashboard" },
     { name: "Pacientes", href: "/patients", icon: "group" },
     { name: "Agenda", href: "/calendar", icon: "calendar_month" },
+    { name: "Documentos", href: "/documents", icon: "description" },
     { name: "Aranceles y O.S.", href: "/pricing", icon: "account_balance_wallet" },
     { name: "Finanzas", href: "/finance", icon: "payments" },
   ];
+
+  // "Equipo" was moved to Opciones Avanzadas
 
   const roleLabels: Record<string, string> = {
     superuser: 'Superusuario',
@@ -262,14 +254,13 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
         
         {/* Profile Header */}
         <div 
-          onClick={() => setIsProfileModalOpen(true)}
-          className="p-4 group-hover:p-6 border-b border-outline-variant/30 flex items-center bg-surface/50 cursor-pointer hover:bg-surface-container-low transition-all w-full justify-center group-hover:justify-start"
+          className="p-4 group-hover:p-6 border-b border-outline-variant/30 flex items-center bg-surface/50 w-full justify-center group-hover:justify-start"
         >
           <div className="flex items-center gap-3">
             {profilePic ? (
               <img src={profilePic} alt="Perfil" className="w-10 h-10 rounded-full object-cover shadow-sm shrink-0" />
             ) : (
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm shrink-0 ${getRoleColor(role)}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm shrink-0 ${profileColor ? `${profileColor} text-white` : getRoleColor(role)}`}>
                 {getInitials(profileName || displayRole)}
               </div>
             )}
@@ -314,6 +305,24 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
 
           <div className="my-2 h-[1px] bg-outline-variant/30 hidden group-hover:block"></div>
           <p className="px-3 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1 hidden group-hover:block">Opciones Avanzadas</p>
+
+          {role === 'superuser' && (
+            <Link 
+              href="/team" 
+              className={`flex items-center gap-4 py-3 rounded-xl transition-all justify-center group-hover:justify-start group-hover:px-4 ${
+                pathname === '/team' ? "bg-primary-container text-primary font-bold shadow-sm" : "text-on-surface hover:bg-surface-container-low font-medium"
+              }`}
+              title="Equipo"
+            >
+              <span 
+                className="material-symbols-outlined text-[24px] shrink-0" 
+                style={pathname === '/team' ? { fontVariationSettings: "'FILL' 1" } : {}}
+              >
+                badge
+              </span>
+              <span className="font-medium text-sm hidden group-hover:block whitespace-nowrap">Equipo</span>
+            </Link>
+          )}
 
           <button 
             onClick={handleGlobalSync}
@@ -384,80 +393,7 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
         })}
       </nav>
 
-      {/* Modal de Perfil */}
-      {isProfileModalOpen && (
-        <Portal>
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 px-4">
-          <div className="bg-surface w-full max-w-[360px] rounded-[2rem] p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setIsProfileModalOpen(false)}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors"
-            >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-            </button>
-            
-            <h2 className="font-title-md text-lg font-bold text-on-surface mb-5 text-center">Editar Perfil</h2>
-            
-            <div className="flex flex-col items-center mb-5 relative">
-              <div className="relative group cursor-pointer">
-                {profilePic ? (
-                  <img 
-                    src={profilePic} 
-                    alt="Perfil" 
-                    className="w-20 h-20 rounded-full object-cover border-4 border-surface-container shadow-sm"
-                  />
-                ) : (
-                  <div className={`w-20 h-20 rounded-full border-4 border-surface-container shadow-sm flex items-center justify-center font-bold text-2xl ${getRoleColor(role)}`}>
-                    {getInitials(profileName)}
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="material-symbols-outlined text-white text-[20px]">photo_camera</span>
-                </div>
-              </div>
-              <p className="text-[11px] text-primary font-semibold mt-2 cursor-pointer hover:underline">Cambiar foto</p>
-            </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-on-surface-variant mb-1 uppercase tracking-wider">Nombre</label>
-                <input 
-                  type="text" 
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-sm text-on-surface font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-[10px] font-bold text-on-surface-variant mb-1 uppercase tracking-wider">Rol de Sistema</label>
-                <input 
-                  type="text" 
-                  value={displayRole}
-                  disabled
-                  className="w-full bg-surface-container-lowest border border-outline-variant/50 rounded-xl px-3 py-2 text-sm text-on-surface-variant font-medium opacity-70 cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button 
-                onClick={() => setIsProfileModalOpen(false)}
-                className="flex-1 py-2.5 px-4 rounded-full font-label-sm text-sm bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleSaveProfile}
-                className="flex-1 py-2.5 px-4 rounded-full font-label-sm text-sm bg-primary hover:bg-primary/90 text-on-primary transition-colors shadow-sm"
-              >
-                Guardar
-              </button>
-            </div>
-          </div>
-        </div>
-        </Portal>
-      )}
 
       {/* Mobile Sidebar (Menú Hamburguesa) */}
       {isMobileMenuOpen && (
@@ -474,7 +410,7 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
                   {profilePic ? (
                     <img src={profilePic} alt="Perfil" className="w-10 h-10 rounded-full object-cover shadow-sm" />
                   ) : (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${getRoleColor(role)}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm ${profileColor ? `${profileColor} text-white` : getRoleColor(role)}`}>
                       {getInitials(profileName || displayRole)}
                     </div>
                   )}
@@ -514,17 +450,32 @@ export default function AppLayout({ children, role }: { children: React.ReactNod
                   <span className="font-medium">Configuración</span>
                 </Link>
 
+                <div className="my-4 h-[1px] bg-outline-variant/30"></div>
+                <p className="px-3 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Opciones Avanzadas</p>
+                
+                {role === 'superuser' && (
+                  <Link 
+                    href="/team" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+                      pathname === '/team' ? "bg-primary-container text-primary font-bold shadow-sm" : "text-on-surface hover:bg-surface-container-low font-medium"
+                    }`}
+                  >
+                    <span 
+                      className="material-symbols-outlined text-[24px]" 
+                      style={pathname === '/team' ? { fontVariationSettings: "'FILL' 1" } : {}}
+                    >
+                      badge
+                    </span>
+                    <span className="text-base">Equipo</span>
+                  </Link>
+                )}
+
                 <div className="my-2 border-t border-outline-variant/30"></div>
                 
                 <p className="px-3 text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Cuenta</p>
 
-                <button 
-                  onClick={() => { setIsMobileMenuOpen(false); setIsProfileModalOpen(true); }}
-                  className="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-surface-container-low text-on-surface transition-colors w-full text-left"
-                >
-                  <span className="material-symbols-outlined text-on-surface-variant">person</span>
-                  <span className="font-medium">Editar Perfil</span>
-                </button>
+
 
                 <button 
                   onClick={async () => {

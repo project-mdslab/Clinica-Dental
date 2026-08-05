@@ -28,9 +28,11 @@ export async function updateSession(request: NextRequest) {
   )
 
   // refrescar el token de sesion si existe y esta expirado
+  console.log('[Middleware] Calling getUser()...');
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  console.log('[Middleware] getUser() finished. User ID:', user?.id);
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login');
 

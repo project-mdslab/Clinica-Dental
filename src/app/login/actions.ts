@@ -14,10 +14,14 @@ export async function login(formData: FormData) {
     return { error: 'Faltan credenciales' }
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
+  console.log('Attempting login with email:', email);
+
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
+
+  console.log('Login result:', { data: data?.user?.id, error });
 
   if (error) {
     return { error: 'Correo o contraseña incorrectos' }

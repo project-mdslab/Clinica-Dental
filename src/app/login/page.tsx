@@ -28,11 +28,23 @@ export default function LoginPage() {
     setIsLoading(true)
     setError(null)
     
-    const formData = new FormData(e.currentTarget)
-    const result = await login(formData)
-    
-    if (result?.error) {
-      setError(result.error)
+    try {
+      const formData = new FormData(e.currentTarget)
+      const result = await login(formData)
+      
+      if (result?.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      console.error("Error during login:", err)
+      // Only set error if it's not a Next.js redirect error.
+      // Next.js redirect errors have a specific signature.
+      if (err instanceof Error && err.message === 'NEXT_REDIRECT') {
+        throw err;
+      } else {
+        setError("Ocurrió un error inesperado al intentar iniciar sesión.")
+      }
+    } finally {
       setIsLoading(false)
     }
   }

@@ -97,6 +97,19 @@ export default async function RootLayout({
         <link rel="apple-touch-startup-image" href="/splash/apple-splash-1136-640.jpg" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
       </head>
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  for(let registration of registrations) {
+                    registration.unregister();
+                  }
+                });
+              }
+            `,
+          }}
+        />
         <NotificationProvider>
           <AppLayout role={role}>{children}</AppLayout>
         </NotificationProvider>

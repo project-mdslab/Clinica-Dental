@@ -371,22 +371,19 @@ export default function CalendarPage() {
 
   const getEventColor = (ev: any) => {
     const profId = ev.professional_id || '';
-    if (!profId) return { bg: 'bg-primary', text: 'text-primary', border: 'border-primary', lightBg: 'bg-primary-container/30' };
+    const prof = professionals.find(p => p.id === profId);
+    const colorKey = prof?.color || 'bg-primary';
+
+    const colorMap: Record<string, any> = {
+      'bg-primary': { bg: 'bg-primary', text: 'text-primary', border: 'border-primary', lightBg: 'bg-primary-container/30' },
+      'bg-[#34D399]': { bg: 'bg-[#34D399]', text: 'text-[#10B981]', border: 'border-[#34D399]/50', lightBg: 'bg-[#34D399]/20' },
+      'bg-[#60A5FA]': { bg: 'bg-[#60A5FA]', text: 'text-[#2563EB]', border: 'border-[#60A5FA]/50', lightBg: 'bg-[#60A5FA]/20' },
+      'bg-[#F59E0B]': { bg: 'bg-[#F59E0B]', text: 'text-[#D97706]', border: 'border-[#F59E0B]/50', lightBg: 'bg-[#F59E0B]/20' },
+      'bg-[#8B5CF6]': { bg: 'bg-[#8B5CF6]', text: 'text-[#6D28D9]', border: 'border-[#8B5CF6]/50', lightBg: 'bg-[#8B5CF6]/20' },
+      'bg-[#EC4899]': { bg: 'bg-[#EC4899]', text: 'text-[#DB2777]', border: 'border-[#EC4899]/50', lightBg: 'bg-[#EC4899]/20' },
+    };
     
-    const colors = [
-      { bg: 'bg-pink-500', text: 'text-pink-600', border: 'border-pink-300', lightBg: 'bg-pink-100' },
-      { bg: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-300', lightBg: 'bg-blue-100' },
-      { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-300', lightBg: 'bg-emerald-100' },
-      { bg: 'bg-purple-500', text: 'text-purple-600', border: 'border-purple-300', lightBg: 'bg-purple-100' },
-      { bg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-300', lightBg: 'bg-amber-100' }
-    ];
-    
-    let hash = 0;
-    for (let i = 0; i < profId.length; i++) {
-      hash = profId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
+    return colorMap[colorKey] || colorMap['bg-primary'];
   };
 
   // Funciones de renderizado para el mini calendario (panel izquierdo)
@@ -937,12 +934,16 @@ export default function CalendarPage() {
 
           {isProfessionalsExpanded && (
             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-              {professionals.map((prof) => (
-                <label key={prof.id} className="flex items-center gap-3 px-2 py-1.5 hover:bg-surface-container-low rounded-lg cursor-pointer transition-colors">
-                  <input type="checkbox" className="w-4 h-4 rounded text-primary border-outline focus:ring-primary" defaultChecked />
-                  <span className="font-body-sm text-sm text-on-surface">{prof.name}</span>
-                </label>
-              ))}
+              {professionals.map((prof) => {
+                const colorClass = prof.color || 'bg-primary';
+                return (
+                  <label key={prof.id} className="flex items-center gap-3 px-2 py-1.5 hover:bg-surface-container-low rounded-lg cursor-pointer transition-colors">
+                    <input type="checkbox" className="w-4 h-4 rounded text-primary border-outline focus:ring-primary" defaultChecked />
+                    <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`}></span>
+                    <span className="font-body-sm text-sm text-on-surface">{prof.name}</span>
+                  </label>
+                );
+              })}
               {professionals.length === 0 && (
                 <div className="text-xs text-on-surface-variant px-2">Cargando profesionales...</div>
               )}
