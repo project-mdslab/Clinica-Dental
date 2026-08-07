@@ -11,7 +11,7 @@ const CLINIC_IMAGES = [
 ];
 
 export default function LoginPage() {
-  const router = useRouter() // Inicializamos el router para la redirección
+  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -19,7 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % CLINIC_IMAGES.length)
-    }, 4000); // Cambia cada 4 segundos
+    }, 4000);
     return () => clearInterval(timer);
   }, []);
 
@@ -29,22 +29,17 @@ export default function LoginPage() {
     setError(null)
     
     try {
-      // Obtenemos los datos directamente del formulario
       const formData = new FormData(e.currentTarget)
-      
-      // Se lo pasamos a la acción de login
       const result = await login(formData)
       
       if (result?.error) {
         setError(result.error)
       } else if (result?.success) {
-        // Redirección rápida desde el navegador hacia el inicio
-        router.push('/')
+        router.refresh()
+        window.location.href = '/'
       }
     } catch (err) {
       console.error("Error during login:", err)
-      // Only set error if it's not a Next.js redirect error.
-      // Next.js redirect errors have a specific signature.
       if (err instanceof Error && err.message === 'NEXT_REDIRECT') {
         throw err;
       } else {
@@ -57,11 +52,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col justify-center items-center p-4 md:p-lg">
-      
-      {/* Contenedor Principal (Tarjeta Dividida) */}
       <div className="w-full max-w-[1000px] bg-surface-container-lowest rounded-[32px] shadow-[0px_20px_60px_rgba(146,130,113,0.15)] flex flex-col md:flex-row overflow-hidden min-h-[650px]">
         
-        {/* Lado Izquierdo (Imagen / Arte en Carrusel) */}
         <div className="w-full h-48 md:h-auto md:w-[45%] bg-primary-container relative overflow-hidden">
           {CLINIC_IMAGES.map((src, index) => (
             <img 
@@ -73,13 +65,10 @@ export default function LoginPage() {
               }`}
             />
           ))}
-          {/* Overlay suave para integrar los colores y textos (opcional) */}
           <div className="absolute inset-0 bg-primary/20 mix-blend-multiply z-20 pointer-events-none"></div>
         </div>
 
-        {/* Lado Derecho (Formulario) */}
         <div className="w-full md:w-[55%] p-lg md:p-[64px] flex flex-col justify-center relative">
-          
           <div className="mt-8 md:mt-0 flex flex-col justify-center h-full">
             <div className="mb-8 flex justify-center md:justify-start">
               <img 
@@ -145,8 +134,8 @@ export default function LoginPage() {
               </button>
             </form>
           </div>
-
         </div>
+
       </div>
     </div>
   )
