@@ -1,7 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 
 export async function login(formData: FormData) {
@@ -27,6 +25,6 @@ export async function login(formData: FormData) {
     return { error: 'Correo o contraseña incorrectos' }
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/')
+  // Devolvemos una señal de éxito en lugar de redireccionar desde acá
+  return { success: true }
 }

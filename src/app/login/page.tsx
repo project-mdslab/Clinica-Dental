@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { login } from './actions'
-import Link from 'next/link'
-import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 
 const CLINIC_IMAGES = [
   '/images/clinic1.jpg',
@@ -12,6 +11,7 @@ const CLINIC_IMAGES = [
 ];
 
 export default function LoginPage() {
+  const router = useRouter() // Inicializamos el router para la redirección
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -29,11 +29,17 @@ export default function LoginPage() {
     setError(null)
     
     try {
+      // Obtenemos los datos directamente del formulario
       const formData = new FormData(e.currentTarget)
+      
+      // Se lo pasamos a la acción de login
       const result = await login(formData)
       
       if (result?.error) {
         setError(result.error)
+      } else if (result?.success) {
+        // Redirección rápida desde el navegador hacia el inicio
+        router.push('/')
       }
     } catch (err) {
       console.error("Error during login:", err)
@@ -74,8 +80,6 @@ export default function LoginPage() {
         {/* Lado Derecho (Formulario) */}
         <div className="w-full md:w-[55%] p-lg md:p-[64px] flex flex-col justify-center relative">
           
-          
-
           <div className="mt-8 md:mt-0 flex flex-col justify-center h-full">
             <div className="mb-8 flex justify-center md:justify-start">
               <img 
